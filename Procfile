@@ -1,1 +1,1 @@
-worker: bun rpc.js
+worker: bun main.js
