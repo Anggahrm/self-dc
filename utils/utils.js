@@ -63,20 +63,55 @@ class Utils {
   }
 
   static parseCooldown(title) {
-    // Parse cooldown from title like "You have already looked around, wait at least **0m 0s**..."
-    const cooldownMatch = title.match(/wait at least \*{0,2}(\d+)m (\d+)s\*{0,2}/i);
+    // Enhanced cooldown parsing to handle multiple formats:
+    // "wait at least **0h 40m 10s**" or "wait at least **40m 10s**" or "wait at least **10s**"
+    
+    // Try format with hours, minutes, and seconds
+    let cooldownMatch = title.match(/wait at least \*{0,2}(\d+)h (\d+)m (\d+)s\*{0,2}/i);
+    if (cooldownMatch) {
+      const hours = parseInt(cooldownMatch[1]);
+      const minutes = parseInt(cooldownMatch[2]);
+      const seconds = parseInt(cooldownMatch[3]);
+      const totalMs = (hours * 3600 + minutes * 60 + seconds) * 1000;
+      
+      console.log(`⏰ Cooldown detected: ${hours}h ${minutes}m ${seconds}s = ${totalMs}ms`);
+      return totalMs;
+    }
+
+    // Try format with minutes and seconds only
+    cooldownMatch = title.match(/wait at least \*{0,2}(\d+)m (\d+)s\*{0,2}/i);
     if (cooldownMatch) {
       const minutes = parseInt(cooldownMatch[1]);
       const seconds = parseInt(cooldownMatch[2]);
       const totalMs = (minutes * 60 + seconds) * 1000;
-
-      // If cooldown is 0 seconds, add a small buffer (3 seconds)
-      if (totalMs === 0) {
-        return 3000;
-      }
-
+      
+      console.log(`⏰ Cooldown detected: ${minutes}m ${seconds}s = ${totalMs}ms`);
       return totalMs;
     }
+
+    // Try format with seconds only
+    cooldownMatch = title.match(/wait at least \*{0,2}(\d+)s\*{0,2}/i);
+    if (cooldownMatch) {
+      const seconds = parseInt(cooldownMatch[1]);
+      const totalMs = seconds * 1000;
+      
+      console.log(`⏰ Cooldown detected: ${seconds}s = ${totalMs}ms`);
+      return totalMs;
+    }
+
+    // Try alternative format patterns
+    cooldownMatch = title.match(/wait.*?(\d+)h.*?(\d+)m.*?(\d+)s/i);
+    if (cooldownMatch) {
+      const hours = parseInt(cooldownMatch[1]);
+      const minutes = parseInt(cooldownMatch[2]);
+      const seconds = parseInt(cooldownMatch[3]);
+      const totalMs = (hours * 3600 + minutes * 60 + seconds) * 1000;
+      
+      console.log(`⏰ Alternative cooldown format detected: ${hours}h ${minutes}m ${seconds}s = ${totalMs}ms`);
+      return totalMs;
+    }
+
+    console.log(`❌ No cooldown pattern matched in: "${title}"`);
     return null;
   }
 
@@ -84,8 +119,9 @@ class Utils {
     if (botResponse.embeds && botResponse.embeds.length > 0) {
       for (const embed of botResponse.embeds) {
         if (embed.title && embed.title.includes('wait at least')) {
+          console.log(`🔍 Checking cooldown in title: "${embed.title}"`);
           const cooldownMs = this.parseCooldown(embed.title);
-          if (cooldownMs > 0) {
+          if (cooldownMs && cooldownMs > 0) {
             return cooldownMs;
           }
         }
