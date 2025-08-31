@@ -47,7 +47,7 @@ module.exports = {
   // Event detection patterns
   EVENTS: {
     EPIC_COIN: {
-      FIELD_NAME: ':EPICcoin: OOPS! God accidentally dropped an EPIC coin',
+      FIELD_NAME: 'OOPS! God accidentally dropped an EPIC coin',
       FIELD_VALUE: 'I wonder who will be the lucky player to get it??',
       RESPONSE: 'CATCH'
     },
