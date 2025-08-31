@@ -16,10 +16,10 @@ class FarmManager {
     };
 
     this.farmStates = {
-      adventure: { enabled: false, executing: false },
-      axe: { enabled: false, executing: false },
-      hunt: { enabled: false, executing: false },
-      heal: { enabled: false, executing: false }
+      adventure: { enabled: false, executing: false, onCooldown: false },
+      axe: { enabled: false, executing: false, onCooldown: false },
+      hunt: { enabled: false, executing: false, onCooldown: false },
+      heal: { executing: false } // heal doesn't have cooldown or timer
     };
   }
 
@@ -93,7 +93,18 @@ class FarmManager {
   }
 
   async executeCommand(command) {
-    if (this.farmStates[command].executing || !this.farmEnabled || !this.currentChannel) return;
+    // Special handling for heal - only check if executing
+    if (command === 'heal') {
+      return await this.triggerHeal();
+    }
+    
+    // Prevent execution if already executing, farm disabled, no channel, or on cooldown
+    if (this.farmStates[command].executing || 
+        !this.farmEnabled || 
+        !this.currentChannel ||
+        this.farmStates[command].onCooldown) {
+      return;
+    }
     
     this.farmStates[command].executing = true;
     console.log(`${this.getCommandEmoji(command)} Executing ${command}...`);
@@ -112,7 +123,6 @@ class FarmManager {
               this.currentChannel.send('🚨 **EPIC GUARD DETECTED!** 👮‍♂️ Auto-stopping farm for safety').catch(() => {});
             }
             this.stop();
-            this.farmStates[command].executing = false;
             return;
           }
           
@@ -120,15 +130,28 @@ class FarmManager {
           const cooldownMs = Utils.checkForCooldown(botResponse);
           if (cooldownMs > 0) {
             console.log(`⏰ ${command} cooldown detected: ${Math.ceil(cooldownMs/1000)}s`);
-            // Reschedule with actual cooldown
-            this.farmStates[command].enabled = false;
-            if (this.farmTimers[command]) clearTimeout(this.farmTimers[command]);
+            
+            // Set cooldown flag to prevent spam
+            this.farmStates[command].onCooldown = true;
+            
+            // Clear existing timer and set new one with dynamic cooldown
+            if (this.farmTimers[command]) {
+              clearTimeout(this.farmTimers[command]);
+              this.farmTimers[command] = null;
+            }
+            
             this.farmTimers[command] = setTimeout(async () => {
-              await this.executeCommand(command);
-              this.startCommandTimer(command); // Return to normal schedule
+              this.farmStates[command].onCooldown = false;
+              if (this.farmStates[command].enabled && this.farmEnabled) {
+                await this.executeCommand(command);
+                // Only restart normal timer if we're still enabled
+                if (this.farmStates[command].enabled && this.farmEnabled) {
+                  this.scheduleNextExecution(command);
+                }
+              }
             }, cooldownMs + 2000);
-            this.farmStates[command].executing = false;
-            return;
+            
+            return; // Exit here - timer will handle next execution
           }
           
           // Check HP and trigger heal if needed (only for commands that can cause HP loss)
@@ -159,29 +182,59 @@ class FarmManager {
     return emojis[command] || '⚡';
   }
 
+  scheduleNextExecution(command) {
+    // Skip heal as it doesn't have scheduled timer
+    if (command === 'heal') return;
+    
+    if (!this.farmStates[command].enabled || 
+        !this.farmEnabled || 
+        this.farmStates[command].onCooldown) return;
+    
+    const cooldown = FARM_COOLDOWNS[command];
+    if (!cooldown) return;
+    
+    // Clear existing timer first
+    if (this.farmTimers[command]) {
+      clearTimeout(this.farmTimers[command]);
+    }
+    
+    this.farmTimers[command] = setTimeout(async () => {
+      if (this.farmStates[command].enabled && this.farmEnabled) {
+        await this.executeCommand(command);
+        // Schedule next execution if still enabled
+        if (this.farmStates[command].enabled && this.farmEnabled) {
+          this.scheduleNextExecution(command);
+        }
+      }
+    }, cooldown);
+  }
+
   startCommandTimer(command) {
+    // Skip heal as it doesn't have scheduled timer
+    if (command === 'heal') return;
+    
     if (this.farmStates[command].enabled || !FARM_COOLDOWNS[command]) return;
     
     this.farmStates[command].enabled = true;
+    this.farmStates[command].onCooldown = false;
     console.log(`${this.getCommandEmoji(command)} ${command} timer started`);
     
-    // Execute immediately then start timer
-    this.executeCommand(command);
-    
-    const scheduleNext = () => {
-      if (!this.farmStates[command].enabled || !this.farmEnabled) return;
-      
-      this.farmTimers[command] = setTimeout(async () => {
-        await this.executeCommand(command);
-        scheduleNext();
-      }, FARM_COOLDOWNS[command]);
-    };
-    
-    scheduleNext();
+    // Execute immediately
+    this.executeCommand(command).then(() => {
+      // Schedule next execution only after first one completes
+      if (this.farmStates[command].enabled && this.farmEnabled) {
+        this.scheduleNextExecution(command);
+      }
+    });
   }
 
   stopCommandTimer(command) {
+    // Skip heal as it doesn't have scheduled timer
+    if (command === 'heal') return;
+    
     this.farmStates[command].enabled = false;
+    this.farmStates[command].onCooldown = false;
+    
     if (this.farmTimers[command]) {
       clearTimeout(this.farmTimers[command]);
       this.farmTimers[command] = null;
@@ -236,10 +289,22 @@ class FarmManager {
     if (!this.farmEnabled) return '🛑 Farm is stopped';
     
     let status = '🚜 **Independent Farm Status:**\n';
-    status += `🗺️ Adventure: ${this.farmStates.adventure.enabled ? (this.farmStates.adventure.executing ? 'Executing...' : 'Active') : 'Stopped'}\n`;
-    status += `🪓 Axe: ${this.farmStates.axe.enabled ? (this.farmStates.axe.executing ? 'Executing...' : 'Active') : 'Stopped'}\n`;
-    status += `🏹 Hunt: ${this.farmStates.hunt.enabled ? (this.farmStates.hunt.executing ? 'Executing...' : 'Active') : 'Stopped'}\n`;
-    status += `🩹 Heal: ${this.farmStates.heal.executing ? 'Healing...' : 'Ready (HP-based trigger)'}\n`;
+    
+    const getCommandStatus = (command) => {
+      if (command === 'heal') {
+        return this.farmStates[command].executing ? 'Healing...' : 'Ready (HP-based trigger)';
+      }
+      
+      if (!this.farmStates[command].enabled) return 'Stopped';
+      if (this.farmStates[command].executing) return 'Executing...';
+      if (this.farmStates[command].onCooldown) return 'On Cooldown';
+      return 'Active';
+    };
+    
+    status += `🗺️ Adventure: ${getCommandStatus('adventure')}\n`;
+    status += `🪓 Axe: ${getCommandStatus('axe')}\n`;
+    status += `🏹 Hunt: ${getCommandStatus('hunt')}\n`;
+    status += `🩹 Heal: ${getCommandStatus('heal')}\n`;
     status += `🚨 EPIC GUARD: Auto-stop protection enabled`;
     
     return status;
