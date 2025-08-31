@@ -73,8 +73,6 @@ class Utils {
       const minutes = parseInt(cooldownMatch[2]);
       const seconds = parseInt(cooldownMatch[3]);
       const totalMs = (hours * 3600 + minutes * 60 + seconds) * 1000;
-      
-      console.log(`⏰ Cooldown detected: ${hours}h ${minutes}m ${seconds}s = ${totalMs}ms`);
       return totalMs;
     }
 
@@ -84,8 +82,6 @@ class Utils {
       const minutes = parseInt(cooldownMatch[1]);
       const seconds = parseInt(cooldownMatch[2]);
       const totalMs = (minutes * 60 + seconds) * 1000;
-      
-      console.log(`⏰ Cooldown detected: ${minutes}m ${seconds}s = ${totalMs}ms`);
       return totalMs;
     }
 
@@ -94,8 +90,6 @@ class Utils {
     if (cooldownMatch) {
       const seconds = parseInt(cooldownMatch[1]);
       const totalMs = seconds * 1000;
-      
-      console.log(`⏰ Cooldown detected: ${seconds}s = ${totalMs}ms`);
       return totalMs;
     }
 
@@ -106,12 +100,9 @@ class Utils {
       const minutes = parseInt(cooldownMatch[2]);
       const seconds = parseInt(cooldownMatch[3]);
       const totalMs = (hours * 3600 + minutes * 60 + seconds) * 1000;
-      
-      console.log(`⏰ Alternative cooldown format detected: ${hours}h ${minutes}m ${seconds}s = ${totalMs}ms`);
       return totalMs;
     }
 
-    console.log(`❌ No cooldown pattern matched in: "${title}"`);
     return null;
   }
 
@@ -119,7 +110,6 @@ class Utils {
     if (botResponse.embeds && botResponse.embeds.length > 0) {
       for (const embed of botResponse.embeds) {
         if (embed.title && embed.title.includes('wait at least')) {
-          console.log(`🔍 Checking cooldown in title: "${embed.title}"`);
           const cooldownMs = this.parseCooldown(embed.title);
           if (cooldownMs && cooldownMs > 0) {
             return cooldownMs;
