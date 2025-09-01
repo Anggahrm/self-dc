@@ -123,6 +123,13 @@ class EventHandler {
       }
     }
 
+    // Check author if specified in pattern
+    if (pattern.AUTHOR) {
+      if (!embed.author || !embed.author.name || !embed.author.name.includes(pattern.AUTHOR)) {
+        return false;
+      }
+    }
+
     // Check fields if specified in pattern
     if (pattern.FIELD_NAME || pattern.FIELD_VALUE) {
       if (!embed.fields || embed.fields.length === 0) {
@@ -174,7 +181,8 @@ class EventHandler {
           comp.customId.includes('fight') ||
           comp.customId.includes('summon') ||
           comp.customId.includes('legendaryboss') ||
-          comp.customId.includes('arena')
+          comp.customId.includes('arena') ||
+          comp.customId.includes('miniboss')
         )) {
           return comp.customId;
         }
