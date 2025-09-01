@@ -113,6 +113,12 @@ class DebugManager {
       metadataInfo += `**Has Embeds:** ${!!(targetMessage.embeds && targetMessage.embeds.length > 0)}\n`;
       metadataInfo += `**Has Components:** ${!!(targetMessage.components && targetMessage.components.length > 0)}\n`;
       
+      // Check for LOADING flag
+      if (targetMessage.flags) {
+        metadataInfo += `**Flags:** ${targetMessage.flags.toArray().join(', ')}\n`;
+        metadataInfo += `**Had LOADING Flag:** ${targetMessage.flags.has('LOADING')}\n`;
+      }
+      
       await message.channel.send(metadataInfo).catch(() => {});
 
       // If no content, embeds, or components
@@ -169,27 +175,28 @@ class DebugManager {
         console.log(`🔍 Debug slash command: ${command}`);
         await message.channel.send(`🔍 **Executing debug command:** \`${command}\``).catch(() => {});
         
-        const slashResponse = await message.channel.sendSlash(EPIC_RPG_BOT_ID, command);
+        // Use the enhanced sendSlashAndWait method that handles "thinking" responses
+        const botResponse = await Utils.sendSlashAndWait(
+          message.channel, 
+          EPIC_RPG_BOT_ID, 
+          command, 
+          [], 
+          15000 // 15 seconds timeout for debug
+        );
 
-        if (slashResponse) {
+        if (botResponse) {
           console.log('✅ Debug command sent successfully');
-
-          // Wait for bot response
-          try {
-            console.log('⏳ Waiting for bot response...');
-            const botResponse = await Utils.waitForBotResponse(slashResponse, EPIC_RPG_BOT_ID, 15000);
-            
-            await message.channel.send('✅ **Bot responded! Debugging response...**').catch(() => {});
-            await this.debugBotMessage(message, botResponse);
-
-          } catch (responseError) {
-            await message.channel.send('**[DEBUG]** ⚠️ No bot response received within 15 seconds').catch(() => {});
-          }
+          await message.channel.send('✅ **Bot responded! Debugging response...**').catch(() => {});
+          await this.debugBotMessage(message, botResponse);
         } else {
-          await message.channel.send('❌ **Failed to send slash command**').catch(() => {});
+          await message.channel.send('❌ **Failed to get bot response**').catch(() => {});
         }
       } catch (error) {
-        await message.channel.send(`❌ **Debug command failed:** ${error.message}`).catch(() => {});
+        if (error.message.includes('Timeout waiting for deferred bot response')) {
+          await message.channel.send('**[DEBUG]** ⚠️ Bot took too long to respond after thinking (15s timeout)').catch(() => {});
+        } else {
+          await message.channel.send(`❌ **Debug command failed:** ${error.message}`).catch(() => {});
+        }
       }
       return true;
     }
@@ -281,6 +288,11 @@ class DebugManager {
             await message.channel.send(buttonInfo);
           }
         }
+      }
+
+      // Check for LOADING flag and log it
+      if (message.flags && message.flags.has('LOADING')) {
+        await message.channel.send(`**[BOT EVENT]** ⏳ Bot message has LOADING flag (thinking...)`);
       }
 
       // If no content, embeds, or components, still log it
