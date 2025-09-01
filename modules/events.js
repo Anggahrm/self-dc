@@ -91,7 +91,7 @@ class EventHandler {
 
   getEventEmoji(eventName) {
     const emojis = {
-      EPIC_COIN: '🪙',
+      EPIC_COIN: '👾',
       COIN_RAIN: '🪙',
       EPIC_TREE: '🌳',
       MEGALODON: '🦈',
