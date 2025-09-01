@@ -6,6 +6,7 @@ class DebugManager {
     this.client = client;
     this.debugEnabled = false;
     this.currentChannel = null;
+    this.pendingDebugMessages = new Map(); // Track thinking messages for debug
   }
 
   setDebugEnabled(enabled) {
@@ -213,6 +214,39 @@ class DebugManager {
   async logBotDebugInfo(message) {
     if (!this.debugEnabled) return;
 
+    // Handle "thinking" messages for debug logging
+    if (message.flags && message.flags.has('LOADING')) {
+      await message.channel.send(`**[BOT EVENT]** ⏳ Bot is thinking... (message will be updated)`);
+      
+      this.pendingDebugMessages.set(message.id, message);
+      
+      const onUpdate = async (oldMsg, newMsg) => {
+        if (oldMsg.id === message.id) {
+          message.client.off('messageUpdate', onUpdate);
+          this.pendingDebugMessages.delete(message.id);
+          await message.channel.send(`**[BOT EVENT]** ✅ Bot finished thinking, showing actual content:`);
+          await this.logActualBotContent(newMsg);
+        }
+      };
+      
+      message.client.on('messageUpdate', onUpdate);
+      
+      // Cleanup after 15 minutes
+      setTimeout(() => {
+        if (this.pendingDebugMessages.has(message.id)) {
+          message.client.off('messageUpdate', onUpdate);
+          this.pendingDebugMessages.delete(message.id);
+        }
+      }, 15 * 60 * 1000);
+      
+      return; // Don't log content yet
+    }
+
+    // Log immediate messages
+    await this.logActualBotContent(message);
+  }
+
+  async logActualBotContent(message) {
     try {
       // Send content if exists
       if (message.content && message.content.trim()) {
@@ -288,11 +322,6 @@ class DebugManager {
             await message.channel.send(buttonInfo);
           }
         }
-      }
-
-      // Check for LOADING flag and log it
-      if (message.flags && message.flags.has('LOADING')) {
-        await message.channel.send(`**[BOT EVENT]** ⏳ Bot message has LOADING flag (thinking...)`);
       }
 
       // If no content, embeds, or components, still log it
