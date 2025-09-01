@@ -44,6 +44,15 @@ module.exports = {
     FARM_START_DELAY: 3000 // 3 seconds delay before starting timers
   },
 
+  // Timeout configurations
+  TIMEOUTS: {
+    FARM_COMMAND: 15000,        // 15 seconds for farm commands
+    EVENT_RESPONSE: 10000,      // 10 seconds for event responses
+    DEBUG_COMMAND: 15000,       // 15 seconds for debug commands
+    DEFERRED_RESPONSE: 900000,  // 15 minutes for deferred/thinking responses
+    THINKING_CLEANUP: 900000    // 15 minutes to cleanup pending thinking messages
+  },
+
   // Event detection patterns
   EVENTS: {
     EPIC_COIN: {
