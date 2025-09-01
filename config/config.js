@@ -56,7 +56,7 @@ module.exports = {
   // Event detection patterns
   EVENTS: {
     EPIC_COIN: {
-      FIELD_NAME: 'OOPS! God accidentally dropped an EPIC coin',
+      FIELD_NAME: 'God accidentally dropped an EPIC coin',
       FIELD_VALUE: 'I wonder who will be the lucky player to get it??',
       RESPONSE: 'CATCH'
     },
@@ -88,7 +88,7 @@ module.exports = {
         {
           // Slash command format
           DESCRIPTION: 'started an arena event!',
-          FIELD_NAME: 'Use crossed_swords to join the arena',
+          FIELD_NAME: 'join the arena',
           FIELD_VALUE: 'arena cookies',
           RESPONSE: 'JOIN',
           BUTTON_ID: 'arena_join'
@@ -96,13 +96,28 @@ module.exports = {
       ]
     },
     MINIBOSS: {
-      FIELD_NAME: 'Type `fight` to help and get a reward!',
-      FIELD_VALUE: 'CHANCE TO WIN',
-      RESPONSE: 'FIGHT'
+      // Support both prefix and slash command formats
+      PATTERNS: [
+        {
+          // Prefix command format
+          FIELD_NAME: 'Type `fight` to help and get a reward!',
+          FIELD_VALUE: 'CHANCE TO WIN',
+          RESPONSE: 'FIGHT'
+        },
+        {
+          // Slash command format
+          DESCRIPTION: 'Help',
+          AUTHOR: 'miniboss',
+          FIELD_NAME: 'help and boost!',
+          FIELD_VALUE: 'CHANCE TO WIN',
+          RESPONSE: 'JOIN',
+          BUTTON_ID: 'miniboss_join'
+        }
+      ]
     },
     LOOTBOX_SUMMONING: {
       FIELD_NAME: 'A LOOTBOX SUMMONING HAS STARTED',
-      FIELD_VALUE: 'Type SUMMON (once) to join the summoning!',
+      FIELD_VALUE: 'join the summoning!',
       RESPONSE: 'SUMMON',
       BUTTON_ID: 'lootboxsummoning_join'
     },
