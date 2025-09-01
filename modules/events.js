@@ -3,11 +3,47 @@ const { EVENTS, EPIC_RPG_BOT_ID } = require('../config/config');
 class EventHandler {
   constructor(client) {
     this.client = client;
+    this.pendingMessages = new Map(); // Track messages that are still "thinking"
   }
 
   async handleAutoEvent(message) {
     if (message.author.id !== EPIC_RPG_BOT_ID) return;
 
+    // If this is a "thinking" message, store it and wait for the actual content
+    if (message.flags && message.flags.has('LOADING')) {
+      console.log('🤔 Bot is thinking... storing message for event detection');
+      this.pendingMessages.set(message.id, message);
+      
+      // Set up listener for when this message gets updated
+      const onUpdate = (oldMsg, newMsg) => {
+        if (oldMsg.id === message.id) {
+          console.log('✅ Bot finished thinking, checking for events...');
+          message.client.off('messageUpdate', onUpdate);
+          this.pendingMessages.delete(message.id);
+          // Process the updated message for events
+          this.processEventDetection(newMsg);
+        }
+      };
+      
+      message.client.on('messageUpdate', onUpdate);
+      
+      // Set timeout to clean up if message never gets updated (15 minutes)
+      setTimeout(() => {
+        if (this.pendingMessages.has(message.id)) {
+          message.client.off('messageUpdate', onUpdate);
+          this.pendingMessages.delete(message.id);
+          console.log('⚠️ Thinking message timeout, cleaning up');
+        }
+      }, 15 * 60 * 1000);
+      
+      return; // Don't process yet, wait for the actual content
+    }
+
+    // Process immediate messages (not thinking)
+    this.processEventDetection(message);
+  }
+
+  async processEventDetection(message) {
     let isAutoCatchEvent = false;
 
     if (message.embeds && message.embeds.length > 0) {
