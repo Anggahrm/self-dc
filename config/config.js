@@ -77,9 +77,23 @@ module.exports = {
       RESPONSE: 'LURE'
     },
     ARENA: {
-      FIELD_NAME: 'Type `join` to join the arena!',
-      FIELD_VALUE: 'arena cookies',
-      RESPONSE: 'JOIN'
+      // Support both prefix and slash command formats
+      PATTERNS: [
+        {
+          // Prefix command format
+          FIELD_NAME: 'Type `join` to join the arena!',
+          FIELD_VALUE: 'arena cookies',
+          RESPONSE: 'JOIN'
+        },
+        {
+          // Slash command format
+          DESCRIPTION: 'started an arena event!',
+          FIELD_NAME: 'Use crossed_swords to join the arena',
+          FIELD_VALUE: 'arena cookies',
+          RESPONSE: 'JOIN',
+          BUTTON_ID: 'arena_join'
+        }
+      ]
     },
     MINIBOSS: {
       FIELD_NAME: 'Type `fight` to help and get a reward!',
