@@ -48,57 +48,112 @@ class EventHandler {
 
     if (message.embeds && message.embeds.length > 0) {
       for (const embed of message.embeds) {
-        if (embed.fields && embed.fields.length > 0) {
-          for (const field of embed.fields) {
+        // Check each event type
+        for (const [eventName, eventConfig] of Object.entries(EVENTS)) {
+          const detectedEvent = this.detectEvent(embed, eventName, eventConfig);
+          
+          if (detectedEvent) {
+            isAutoCatchEvent = true;
+            console.log(`${this.getEventEmoji(eventName)} ${eventName} EVENT DETECTED! Auto-responding...`);
 
-            // Check each event type
-            for (const [eventName, eventConfig] of Object.entries(EVENTS)) {
-              if (field.name && field.name.includes(eventConfig.FIELD_NAME) &&
-                  field.value && field.value.includes(eventConfig.FIELD_VALUE)) {
-                isAutoCatchEvent = true;
-                console.log(`${this.getEventEmoji(eventName)} ${eventName} EVENT DETECTED! Auto-responding...`);
-
-                setTimeout(async () => {
-                  try {
-                    // Try button click first if available
-                    if (eventConfig.BUTTON_ID && message.components && message.components.length > 0) {
-                      await message.clickButton(eventConfig.BUTTON_ID);
-                      console.log(`✅ Auto-${eventConfig.RESPONSE} button clicked successfully`);
-                    } else if (message.components && message.components.length > 0) {
-                      // Try to find appropriate button
-                      let buttonCustomId = await this.findEventButton(message, eventConfig.RESPONSE);
-                      
-                      if (buttonCustomId) {
-                        await message.clickButton(buttonCustomId);
-                        console.log(`✅ Auto-${eventConfig.RESPONSE} button clicked successfully`);
-                      } else {
-                        await message.channel.send(eventConfig.RESPONSE);
-                        console.log(`✅ Auto-${eventConfig.RESPONSE} typed successfully (no button found)`);
-                      }
-                    } else {
-                      await message.channel.send(eventConfig.RESPONSE);
-                      console.log(`✅ Auto-${eventConfig.RESPONSE} typed successfully`);
-                    }
-                  } catch (error) {
-                    console.error(`❌ ${eventConfig.RESPONSE} failed:`, error.message);
-                    try {
-                      await message.channel.send(eventConfig.RESPONSE);
-                      console.log(`✅ Auto-${eventConfig.RESPONSE} typed successfully (fallback)`);
-                    } catch (typeError) {
-                      console.error(`❌ Failed to auto-${eventConfig.RESPONSE}:`, typeError);
-                    }
+            setTimeout(async () => {
+              try {
+                // Try button click first if available
+                if (detectedEvent.BUTTON_ID && message.components && message.components.length > 0) {
+                  await message.clickButton(detectedEvent.BUTTON_ID);
+                  console.log(`✅ Auto-${detectedEvent.RESPONSE} button clicked successfully`);
+                } else if (message.components && message.components.length > 0) {
+                  // Try to find appropriate button
+                  let buttonCustomId = await this.findEventButton(message, detectedEvent.RESPONSE);
+                  
+                  if (buttonCustomId) {
+                    await message.clickButton(buttonCustomId);
+                    console.log(`✅ Auto-${detectedEvent.RESPONSE} button clicked successfully`);
+                  } else {
+                    await message.channel.send(detectedEvent.RESPONSE);
+                    console.log(`✅ Auto-${detectedEvent.RESPONSE} typed successfully (no button found)`);
                   }
-                }, 1000);
-                break;
+                } else {
+                  await message.channel.send(detectedEvent.RESPONSE);
+                  console.log(`✅ Auto-${detectedEvent.RESPONSE} typed successfully`);
+                }
+              } catch (error) {
+                console.error(`❌ ${detectedEvent.RESPONSE} failed:`, error.message);
+                try {
+                  await message.channel.send(detectedEvent.RESPONSE);
+                  console.log(`✅ Auto-${detectedEvent.RESPONSE} typed successfully (fallback)`);
+                } catch (typeError) {
+                  console.error(`❌ Failed to auto-${detectedEvent.RESPONSE}:`, typeError);
+                }
               }
-            }
-
-            if (isAutoCatchEvent) break;
+            }, 1000);
+            break;
           }
-          if (isAutoCatchEvent) break;
         }
+
+        if (isAutoCatchEvent) break;
       }
     }
+  }
+
+  detectEvent(embed, eventName, eventConfig) {
+    // Handle events with multiple patterns (like ARENA)
+    if (eventConfig.PATTERNS) {
+      for (const pattern of eventConfig.PATTERNS) {
+        if (this.matchesPattern(embed, pattern)) {
+          return pattern;
+        }
+      }
+      return null;
+    }
+
+    // Handle legacy single pattern events
+    if (this.matchesPattern(embed, eventConfig)) {
+      return eventConfig;
+    }
+
+    return null;
+  }
+
+  matchesPattern(embed, pattern) {
+    // Check description if specified in pattern
+    if (pattern.DESCRIPTION) {
+      if (!embed.description || !embed.description.includes(pattern.DESCRIPTION)) {
+        return false;
+      }
+    }
+
+    // Check fields if specified in pattern
+    if (pattern.FIELD_NAME || pattern.FIELD_VALUE) {
+      if (!embed.fields || embed.fields.length === 0) {
+        return false;
+      }
+
+      let fieldMatches = false;
+      for (const field of embed.fields) {
+        let nameMatches = true;
+        let valueMatches = true;
+
+        if (pattern.FIELD_NAME) {
+          nameMatches = field.name && field.name.includes(pattern.FIELD_NAME);
+        }
+
+        if (pattern.FIELD_VALUE) {
+          valueMatches = field.value && field.value.includes(pattern.FIELD_VALUE);
+        }
+
+        if (nameMatches && valueMatches) {
+          fieldMatches = true;
+          break;
+        }
+      }
+
+      if (!fieldMatches) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   async findEventButton(message, response) {
@@ -118,7 +173,8 @@ class EventHandler {
           comp.customId.includes('join') ||
           comp.customId.includes('fight') ||
           comp.customId.includes('summon') ||
-          comp.customId.includes('legendaryboss')
+          comp.customId.includes('legendaryboss') ||
+          comp.customId.includes('arena')
         )) {
           return comp.customId;
         }
