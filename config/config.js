@@ -76,6 +76,18 @@ module.exports = {
       FIELD_NAME: 'Type `fight` to help and get a reward!',
       FIELD_VALUE: 'CHANCE TO WIN',
       RESPONSE: 'FIGHT'
+    },
+    LOOTBOX_SUMMONING: {
+      FIELD_NAME: 'A LOOTBOX SUMMONING HAS STARTED',
+      FIELD_VALUE: 'Type SUMMON (once) to join the summoning!',
+      RESPONSE: 'SUMMON',
+      BUTTON_ID: 'lootboxsummoning_join'
+    },
+    LEGENDARY_BOSS: {
+      FIELD_NAME: 'A LEGENDARY BOSS JUST SPAWNED',
+      FIELD_VALUE: 'Type TIME TO FIGHT',
+      RESPONSE: 'TIME TO FIGHT',
+      BUTTON_ID: 'legendaryboss_join'
     }
   }
 };
