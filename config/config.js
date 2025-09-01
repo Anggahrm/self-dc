@@ -33,7 +33,6 @@ module.exports = {
     adventure: 3600000, // 1 hour
     axe: 300000,      // 5 minutes
     hunt: 60000        // 1 minute
-    // heal removed - no cooldown, only HP-based
   },
 
   // Farm settings
