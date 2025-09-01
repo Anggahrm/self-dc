@@ -117,13 +117,13 @@ module.exports = {
     },
     LOOTBOX_SUMMONING: {
       FIELD_NAME: 'A LOOTBOX SUMMONING HAS STARTED',
-      FIELD_VALUE: 'join the summoning!',
+      FIELD_VALUE: 'Type **SUMMON**',
       RESPONSE: 'SUMMON',
       BUTTON_ID: 'lootboxsummoning_join'
     },
     LEGENDARY_BOSS: {
       FIELD_NAME: 'A LEGENDARY BOSS JUST SPAWNED',
-      FIELD_VALUE: 'Type TIME TO FIGHT',
+      FIELD_VALUE: 'Type **TIME TO FIGHT**',
       RESPONSE: 'TIME TO FIGHT',
       BUTTON_ID: 'legendaryboss_join'
     }
