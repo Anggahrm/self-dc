@@ -80,7 +80,9 @@ class EventHandler {
           comp.customId.includes('catch') ||
           comp.customId.includes('lure') ||
           comp.customId.includes('join') ||
-          comp.customId.includes('fight')
+          comp.customId.includes('fight') ||
+          comp.customId.includes('summon') ||
+          comp.customId.includes('legendaryboss')
         )) {
           return comp.customId;
         }
@@ -96,7 +98,9 @@ class EventHandler {
       EPIC_TREE: '🌳',
       MEGALODON: '🦈',
       ARENA: '⚔️',
-      MINIBOSS: '👹'
+      MINIBOSS: '👹',
+      LOOTBOX_SUMMONING: '📦',
+      LEGENDARY_BOSS: '🐉'
     };
     return emojis[eventName] || '🎯';
   }
