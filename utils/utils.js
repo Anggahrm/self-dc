@@ -23,6 +23,13 @@ class Utils {
 
       function onMessage(message) {
         if (message.author.id === botId && message.channel.id === originalMessage.channel.id) {
+          // Check if this is a "thinking" message (deferred response)
+          if (message.flags && message.flags.has('LOADING')) {
+            console.log('🤔 Bot is thinking... waiting for actual response');
+            // Don't resolve yet, wait for the messageUpdate event
+            return;
+          }
+          
           if (!done) {
             done = true;
             clearTimeout(timeoutId);
@@ -35,6 +42,20 @@ class Utils {
 
       function onUpdate(oldMsg, newMsg) {
         if (newMsg.author.id === botId && newMsg.channel.id === originalMessage.channel.id) {
+          // Check if this was previously a "thinking" message that now has content
+          if (oldMsg.flags && oldMsg.flags.has('LOADING') && (!newMsg.flags || !newMsg.flags.has('LOADING'))) {
+            console.log('✅ Bot finished thinking, got actual response');
+            if (!done) {
+              done = true;
+              clearTimeout(timeoutId);
+              originalMessage.client.off('messageCreate', onMessage);
+              originalMessage.client.off('messageUpdate', onUpdate);
+              resolve(newMsg);
+            }
+            return;
+          }
+          
+          // Handle regular message updates
           if (!done) {
             done = true;
             clearTimeout(timeoutId);
@@ -48,6 +69,63 @@ class Utils {
       originalMessage.client.on('messageCreate', onMessage);
       originalMessage.client.on('messageUpdate', onUpdate);
     });
+  }
+
+  /**
+   * Enhanced slash command sender that handles "thinking" responses
+   * @param {Object} channel - Discord channel object
+   * @param {string} botId - Bot ID to send slash command to
+   * @param {string} command - Slash command name
+   * @param {Array} options - Optional slash command options
+   * @param {number} timeout - Timeout in milliseconds (default: 15 minutes for deferred responses)
+   */
+  static async sendSlashAndWait(channel, botId, command, options = [], timeout = 15 * 60 * 1000) {
+    try {
+      const slashResponse = options.length > 0 
+        ? await channel.sendSlash(botId, command, ...options)
+        : await channel.sendSlash(botId, command);
+      
+      if (!slashResponse) {
+        throw new Error('Failed to send slash command');
+      }
+
+      // Check if the response has LOADING flag (bot is thinking)
+      if (slashResponse.flags && slashResponse.flags.has('LOADING')) {
+        console.log('🤔 Bot is thinking... waiting for actual response (up to 15 minutes)');
+        
+        return new Promise((resolve, reject) => {
+          let done = false;
+          const timeoutId = setTimeout(() => {
+            if (!done) {
+              done = true;
+              channel.client.off('messageUpdate', onUpdate);
+              reject(new Error('Timeout waiting for deferred bot response'));
+            }
+          }, timeout);
+
+          function onUpdate(oldMsg, newMsg) {
+            if (oldMsg.id === slashResponse.id) {
+              if (!done) {
+                done = true;
+                clearTimeout(timeoutId);
+                channel.client.off('messageUpdate', onUpdate);
+                console.log('✅ Bot finished thinking, got actual response');
+                resolve(newMsg);
+              }
+            }
+          }
+
+          channel.client.on('messageUpdate', onUpdate);
+        });
+      } else {
+        // Immediate response, return as-is
+        console.log('⚡ Got immediate bot response');
+        return slashResponse;
+      }
+    } catch (error) {
+      console.error('❌ Error in sendSlashAndWait:', error);
+      throw error;
+    }
   }
 
   static parseHP(content) {
