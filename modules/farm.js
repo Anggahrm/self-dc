@@ -53,39 +53,43 @@ class FarmManager {
     console.log('🩹 Executing emergency heal...');
     
     try {
-      const slashResponse = await this.currentChannel.sendSlash(EPIC_RPG_BOT_ID, 'heal');
+      // Use the enhanced sendSlashAndWait method that handles "thinking" responses
+      const botResponse = await Utils.sendSlashAndWait(
+        this.currentChannel, 
+        EPIC_RPG_BOT_ID, 
+        'heal', 
+        [], 
+        FARM.RESPONSE_TIMEOUT
+      );
       
-      if (slashResponse) {
-        try {
-          const botResponse = await Utils.waitForBotResponse(slashResponse, EPIC_RPG_BOT_ID, FARM.RESPONSE_TIMEOUT);
-          
-          // Check for EPIC GUARD first
-          if (Utils.checkForEpicGuard(botResponse)) {
-            console.log('🚨 EPIC GUARD DETECTED! Auto-stopping farm...');
-            if (this.currentChannel) {
-              this.currentChannel.send('🚨 **EPIC GUARD DETECTED!** 👮‍♂️ Auto-stopping farm for safety').catch(() => {});
-            }
-            this.stop();
-            this.farmStates.heal.executing = false;
-            return;
+      if (botResponse) {
+        // Check for EPIC GUARD first
+        if (Utils.checkForEpicGuard(botResponse)) {
+          console.log('🚨 EPIC GUARD DETECTED! Auto-stopping farm...');
+          if (this.currentChannel) {
+            this.currentChannel.send('🚨 **EPIC GUARD DETECTED!** 👮‍♂️ Auto-stopping farm for safety').catch(() => {});
           }
-          
-          console.log('✅ Heal completed successfully');
-          
-          // Check if heal was successful by parsing response
-          if (botResponse.content) {
-            const healMatch = botResponse.content.match(/healed.*?(\d+).*?hp/i);
-            if (healMatch) {
-              console.log(`🩹 Healed ${healMatch[1]} HP successfully`);
-            }
+          this.stop();
+          this.farmStates.heal.executing = false;
+          return;
+        }
+        
+        console.log('✅ Heal completed successfully');
+        
+        // Check if heal was successful by parsing response
+        if (botResponse.content) {
+          const healMatch = botResponse.content.match(/healed.*?(\d+).*?hp/i);
+          if (healMatch) {
+            console.log(`🩹 Healed ${healMatch[1]} HP successfully`);
           }
-          
-        } catch (responseError) {
-          console.log('⚠️ Heal: No response received');
         }
       }
     } catch (error) {
-      console.error('❌ Heal execution failed:', error);
+      if (error.message.includes('Timeout waiting for deferred bot response')) {
+        console.log('⚠️ Heal: Bot took too long to respond after thinking');
+      } else {
+        console.error('❌ Heal execution failed:', error);
+      }
     } finally {
       // Always reset executing state immediately, no cooldown
       this.farmStates.heal.executing = false;
@@ -110,63 +114,67 @@ class FarmManager {
     console.log(`${this.getCommandEmoji(command)} Executing ${command}...`);
     
     try {
-      const slashResponse = await this.currentChannel.sendSlash(EPIC_RPG_BOT_ID, command);
+      // Use the enhanced sendSlashAndWait method that handles "thinking" responses
+      const botResponse = await Utils.sendSlashAndWait(
+        this.currentChannel, 
+        EPIC_RPG_BOT_ID, 
+        command, 
+        [], 
+        FARM.RESPONSE_TIMEOUT
+      );
       
-      if (slashResponse) {
-        try {
-          const botResponse = await Utils.waitForBotResponse(slashResponse, EPIC_RPG_BOT_ID, FARM.RESPONSE_TIMEOUT);
-          
-          // Check for EPIC GUARD first
-          if (Utils.checkForEpicGuard(botResponse)) {
-            console.log('🚨 EPIC GUARD DETECTED! Auto-stopping farm...');
-            if (this.currentChannel) {
-              this.currentChannel.send('🚨 **EPIC GUARD DETECTED!** 👮‍♂️ Auto-stopping farm for safety').catch(() => {});
-            }
-            this.stop();
-            return;
+      if (botResponse) {
+        // Check for EPIC GUARD first
+        if (Utils.checkForEpicGuard(botResponse)) {
+          console.log('🚨 EPIC GUARD DETECTED! Auto-stopping farm...');
+          if (this.currentChannel) {
+            this.currentChannel.send('🚨 **EPIC GUARD DETECTED!** 👮‍♂️ Auto-stopping farm for safety').catch(() => {});
           }
-          
-          // Check for dynamic cooldown
-          const cooldownMs = Utils.checkForCooldown(botResponse);
-          if (cooldownMs > 0) {
-            console.log(`⏰ ${command} cooldown detected: ${Math.ceil(cooldownMs/1000)}s`);
-            
-            // Set cooldown flag to prevent spam
-            this.farmStates[command].onCooldown = true;
-            
-            // Clear existing timer and set new one with dynamic cooldown
-            if (this.farmTimers[command]) {
-              clearTimeout(this.farmTimers[command]);
-              this.farmTimers[command] = null;
-            }
-            
-            this.farmTimers[command] = setTimeout(async () => {
-              this.farmStates[command].onCooldown = false;
-              if (this.farmStates[command].enabled && this.farmEnabled) {
-                await this.executeCommand(command);
-                // Only restart normal timer if we're still enabled
-                if (this.farmStates[command].enabled && this.farmEnabled) {
-                  this.scheduleNextExecution(command);
-                }
-              }
-            }, cooldownMs + 2000);
-            
-            return; // Exit here - timer will handle next execution
-          }
-          
-          // Check HP and trigger heal if needed (only for commands that can cause HP loss)
-          if (command === 'adventure' || command === 'hunt') {
-            await this.checkAndHeal(botResponse);
-          }
-          
-          console.log(`✅ ${command} completed successfully`);
-          
-        } catch (responseError) {
-          console.log(`⚠️ ${command}: No response received`);
+          this.stop();
+          return;
         }
+        
+        // Check for dynamic cooldown
+        const cooldownMs = Utils.checkForCooldown(botResponse);
+        if (cooldownMs > 0) {
+          console.log(`⏰ ${command} cooldown detected: ${Math.ceil(cooldownMs/1000)}s`);
+          
+          // Set cooldown flag to prevent spam
+          this.farmStates[command].onCooldown = true;
+          
+          // Clear existing timer and set new one with dynamic cooldown
+          if (this.farmTimers[command]) {
+            clearTimeout(this.farmTimers[command]);
+            this.farmTimers[command] = null;
+          }
+          
+          this.farmTimers[command] = setTimeout(async () => {
+            this.farmStates[command].onCooldown = false;
+            if (this.farmStates[command].enabled && this.farmEnabled) {
+              await this.executeCommand(command);
+              // Only restart normal timer if we're still enabled
+              if (this.farmStates[command].enabled && this.farmEnabled) {
+                this.scheduleNextExecution(command);
+              }
+            }
+          }, cooldownMs + 2000);
+          
+          return; // Exit here - timer will handle next execution
+        }
+        
+        // Check HP and trigger heal if needed (only for commands that can cause HP loss)
+        if (command === 'adventure' || command === 'hunt') {
+          await this.checkAndHeal(botResponse);
+        }
+        
+        console.log(`✅ ${command} completed successfully`);
       }
     } catch (error) {
-      console.error(`❌ ${command} execution failed:`, error);
+      if (error.message.includes('Timeout waiting for deferred bot response')) {
+        console.log(`⚠️ ${command}: Bot took too long to respond after thinking`);
+      } else {
+        console.error(`❌ ${command} execution failed:`, error);
+      }
     } finally {
       this.farmStates[command].executing = false;
     }
