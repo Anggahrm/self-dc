@@ -3,7 +3,6 @@ const { EPIC_RPG_BOT_ID } = require('../config/config');
 class MessageHandler {
   constructor(client, managers) {
     this.client = client;
-    this.rpcManager = managers.rpcManager;
     this.farmManager = managers.farmManager;
     this.debugManager = managers.debugManager;
     this.eventHandler = managers.eventHandler;
@@ -28,19 +27,8 @@ class MessageHandler {
       if (handled) return;
     }
 
-    // Handle RPC commands
-    if (content === '.on rpc') {
-      await message.delete().catch(() => {});
-      this.rpcManager.setCurrentChannel(message.channel);
-      this.rpcManager.start(message.channel);
-    } else if (content === '.off rpc') {
-      await message.delete().catch(() => {});
-      this.rpcManager.setCurrentChannel(message.channel);
-      this.rpcManager.stop();
-    }
-    
     // Handle Farm commands
-    else if (content === '.on farm') {
+    if (content === '.on farm') {
       await message.delete().catch(() => {});
       await this.farmManager.start(message.channel);
     } else if (content === '.off farm') {
@@ -53,19 +41,34 @@ class MessageHandler {
       message.channel.send(status).catch(() => {});
     }
     
+    // Handle Event commands
+    else if (content === '.on event') {
+      await message.delete().catch(() => {});
+      this.eventHandler.setCurrentChannel(message.channel);
+      this.eventHandler.setEnabled(true);
+      console.log('Auto Event Enabled');
+      message.channel.send('**Auto Event Enabled**').catch(() => {});
+    } else if (content === '.off event') {
+      await message.delete().catch(() => {});
+      this.eventHandler.setCurrentChannel(message.channel);
+      this.eventHandler.setEnabled(false);
+      console.log('Auto Event Disabled');
+      message.channel.send('**Auto Event Disabled**').catch(() => {});
+    }
+    
     // Handle Debug commands
     else if (content === '.on debug') {
       await message.delete().catch(() => {});
       this.debugManager.setCurrentChannel(message.channel);
       this.debugManager.setDebugEnabled(true);
-      console.log('🐛 Debug Enabled');
-      message.channel.send('🐛 **Debug Enabled** - Bot events will be shown').catch(() => {});
+      console.log('Debug Enabled');
+      message.channel.send('**Debug Enabled** - Bot events will be shown').catch(() => {});
     } else if (content === '.off debug') {
       await message.delete().catch(() => {});
       this.debugManager.setCurrentChannel(message.channel);
       this.debugManager.setDebugEnabled(false);
-      console.log('🚫 Debug Disabled');
-      message.channel.send('🚫 **Debug Disabled** - Bot events will be hidden').catch(() => {});
+      console.log('Debug Disabled');
+      message.channel.send('**Debug Disabled** - Bot events will be hidden').catch(() => {});
     }
   }
 }

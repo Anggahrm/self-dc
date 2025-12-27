@@ -6,7 +6,7 @@ class DebugManager {
     this.client = client;
     this.debugEnabled = false;
     this.currentChannel = null;
-    this.pendingDebugMessages = new Map(); // Track thinking messages for debug
+    this.pendingDebugMessages = new Map();
   }
 
   setDebugEnabled(enabled) {
@@ -23,14 +23,12 @@ class DebugManager {
 
   async debugBotMessage(message, targetMessage) {
     try {
-      console.log('🔍 Starting debug of bot message...');
+      console.log('Starting debug of bot message...');
       
-      // Debug message content
       if (targetMessage.content && targetMessage.content.trim()) {
         await message.channel.send(`**[DEBUG]** Bot Message Content:\n\`\`\`\n${targetMessage.content}\n\`\`\``).catch(() => {});
       }
 
-      // Debug embeds
       if (targetMessage.embeds && targetMessage.embeds.length > 0) {
         await message.channel.send(`**[DEBUG]** Bot has ${targetMessage.embeds.length} embed(s)`).catch(() => {});
 
@@ -52,7 +50,6 @@ class DebugManager {
             });
           }
 
-          // Split long messages
           if (embedInfo.length > 1900) {
             const chunks = embedInfo.match(/.{1,1900}(\n|$)/g);
             for (const chunk of chunks) {
@@ -64,7 +61,6 @@ class DebugManager {
         }
       }
 
-      // Debug buttons/components
       if (targetMessage.components && targetMessage.components.length > 0) {
         await message.channel.send(`**[DEBUG]** Bot has ${targetMessage.components.length} component row(s) with buttons`).catch(() => {});
         
@@ -92,7 +88,6 @@ class DebugManager {
             });
           }
 
-          // Split long button info
           if (buttonInfo.length > 1900) {
             const chunks = buttonInfo.match(/.{1,1900}(\n|$)/g);
             for (const chunk of chunks) {
@@ -104,7 +99,6 @@ class DebugManager {
         }
       }
 
-      // Debug message metadata
       let metadataInfo = `**[DEBUG]** Message Metadata:\n`;
       metadataInfo += `**Message ID:** ${targetMessage.id}\n`;
       metadataInfo += `**Author:** ${targetMessage.author.username} (${targetMessage.author.id})\n`;
@@ -114,7 +108,6 @@ class DebugManager {
       metadataInfo += `**Has Embeds:** ${!!(targetMessage.embeds && targetMessage.embeds.length > 0)}\n`;
       metadataInfo += `**Has Components:** ${!!(targetMessage.components && targetMessage.components.length > 0)}\n`;
       
-      // Check for LOADING flag
       if (targetMessage.flags) {
         metadataInfo += `**Flags:** ${targetMessage.flags.toArray().join(', ')}\n`;
         metadataInfo += `**Had LOADING Flag:** ${targetMessage.flags.has('LOADING')}\n`;
@@ -122,17 +115,16 @@ class DebugManager {
       
       await message.channel.send(metadataInfo).catch(() => {});
 
-      // If no content, embeds, or components
       if ((!targetMessage.content || !targetMessage.content.trim()) && 
           (!targetMessage.embeds || targetMessage.embeds.length === 0) &&
           (!targetMessage.components || targetMessage.components.length === 0)) {
-        await message.channel.send(`**[DEBUG]** ⚠️ Bot message has no content, embeds, or components`).catch(() => {});
+        await message.channel.send(`**[DEBUG]** Bot message has no content, embeds, or components`).catch(() => {});
       }
 
-      console.log('✅ Bot message debug completed');
+      console.log('Bot message debug completed');
 
     } catch (error) {
-      console.error('❌ Error debugging bot message:', error);
+      console.error('Error debugging bot message:', error);
       await message.channel.send(`**[DEBUG ERROR]** ${error.message}`).catch(() => {});
     }
   }
@@ -140,71 +132,65 @@ class DebugManager {
   async handleDebugCommand(message) {
     await message.delete().catch(() => {});
     
-    // Check if this is a reply to another message
     if (message.reference && message.reference.messageId) {
       try {
-        // Fetch the replied message
         const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
         
-        // Check if the replied message is from EPIC RPG bot
         if (repliedMessage.author.id === EPIC_RPG_BOT_ID) {
-          console.log('🔍 Debugging replied bot message...');
-          await message.channel.send('🔍 **Debugging replied bot message...**').catch(() => {});
+          console.log('Debugging replied bot message...');
+          await message.channel.send('**Debugging replied bot message...**').catch(() => {});
           await this.debugBotMessage(message, repliedMessage);
           return true;
         } else {
-          await message.channel.send(`❌ **Error:** You can only debug messages from EPIC RPG bot (ID: ${EPIC_RPG_BOT_ID})`).catch(() => {});
+          await message.channel.send(`**Error:** You can only debug messages from EPIC RPG bot (ID: ${EPIC_RPG_BOT_ID})`).catch(() => {});
           return true;
         }
       } catch (error) {
-        await message.channel.send(`❌ **Error fetching replied message:** ${error.message}`).catch(() => {});
+        await message.channel.send(`**Error fetching replied message:** ${error.message}`).catch(() => {});
         return true;
       }
     }
     
-    // If not a reply, check if it's a slash command debug
     const content = message.content.toLowerCase().trim();
     if (content.startsWith('.debug ')) {
       const command = content.substring(7).trim();
       
       if (!command) {
-        await message.channel.send('❌ **Usage:** `.debug <command>` or reply to a bot message with `.debug`').catch(() => {});
+        await message.channel.send('**Usage:** `.debug <command>` or reply to a bot message with `.debug`').catch(() => {});
         return true;
       }
 
       try {
-        console.log(`🔍 Debug slash command: ${command}`);
-        await message.channel.send(`🔍 **Executing debug command:** \`${command}\``).catch(() => {});
+        console.log(`Debug slash command: ${command}`);
+        await message.channel.send(`**Executing debug command:** \`${command}\``).catch(() => {});
         
-        // Use the enhanced sendSlashAndWait method that handles "thinking" responses
         const botResponse = await Utils.sendSlashAndWait(
           message.channel, 
           EPIC_RPG_BOT_ID, 
           command, 
           [], 
-          15000 // 15 seconds timeout for debug
+          15000
         );
 
         if (botResponse) {
-          console.log('✅ Debug command sent successfully');
-          await message.channel.send('✅ **Bot responded! Debugging response...**').catch(() => {});
+          console.log('Debug command sent successfully');
+          await message.channel.send('**Bot responded! Debugging response...**').catch(() => {});
           await this.debugBotMessage(message, botResponse);
         } else {
-          await message.channel.send('❌ **Failed to get bot response**').catch(() => {});
+          await message.channel.send('**Failed to get bot response**').catch(() => {});
         }
       } catch (error) {
         if (error.message.includes('Timeout waiting for deferred bot response')) {
-          await message.channel.send('**[DEBUG]** ⚠️ Bot took too long to respond after thinking (15s timeout)').catch(() => {});
+          await message.channel.send('**[DEBUG]** Bot took too long to respond after thinking (15s timeout)').catch(() => {});
         } else {
-          await message.channel.send(`❌ **Debug command failed:** ${error.message}`).catch(() => {});
+          await message.channel.send(`**Debug command failed:** ${error.message}`).catch(() => {});
         }
       }
       return true;
     }
     
-    // If it's just ".debug" without parameters and not a reply
     if (content === '.debug') {
-      await message.channel.send('ℹ️ **Debug Usage:**\n• `.debug <command>` - Debug a slash command\n• Reply to a bot message with `.debug` - Debug that message').catch(() => {});
+      await message.channel.send('**Debug Usage:**\n- `.debug <command>` - Debug a slash command\n- Reply to a bot message with `.debug` - Debug that message').catch(() => {});
       return true;
     }
     
@@ -214,9 +200,8 @@ class DebugManager {
   async logBotDebugInfo(message) {
     if (!this.debugEnabled) return;
 
-    // Handle "thinking" messages for debug logging
     if (message.flags && message.flags.has('LOADING')) {
-      await message.channel.send(`**[BOT EVENT]** ⏳ Bot is thinking... (message will be updated)`);
+      await message.channel.send(`**[BOT EVENT]** Bot is thinking... (message will be updated)`);
       
       this.pendingDebugMessages.set(message.id, message);
       
@@ -224,14 +209,13 @@ class DebugManager {
         if (oldMsg.id === message.id) {
           message.client.off('messageUpdate', onUpdate);
           this.pendingDebugMessages.delete(message.id);
-          await message.channel.send(`**[BOT EVENT]** ✅ Bot finished thinking, showing actual content:`);
+          await message.channel.send(`**[BOT EVENT]** Bot finished thinking, showing actual content:`);
           await this.logActualBotContent(newMsg);
         }
       };
       
       message.client.on('messageUpdate', onUpdate);
       
-      // Cleanup after 15 minutes
       setTimeout(() => {
         if (this.pendingDebugMessages.has(message.id)) {
           message.client.off('messageUpdate', onUpdate);
@@ -239,25 +223,21 @@ class DebugManager {
         }
       }, 15 * 60 * 1000);
       
-      return; // Don't log content yet
+      return;
     }
 
-    // Log immediate messages
     await this.logActualBotContent(message);
   }
 
   async logActualBotContent(message) {
     try {
-      // Send content if exists
       if (message.content && message.content.trim()) {
         await message.channel.send(`**[BOT EVENT]** Bot Message:\n\`\`\`\n${message.content}\n\`\`\``);
       }
 
-      // Send embed info if exists
       if (message.embeds && message.embeds.length > 0) {
         await message.channel.send(`**[BOT EVENT]** Bot has ${message.embeds.length} embed(s)`);
 
-        // Display each embed's content
         for (let i = 0; i < message.embeds.length; i++) {
           const embed = message.embeds[i];
           let embedInfo = `**[BOT EVENT]** Embed ${i + 1}:\n`;
@@ -276,7 +256,6 @@ class DebugManager {
             });
           }
 
-          // Check if message is too long and split if needed
           if (embedInfo.length > 1900) {
             const chunks = embedInfo.match(/.{1,1900}(\n|$)/g);
             for (const chunk of chunks) {
@@ -288,7 +267,6 @@ class DebugManager {
         }
       }
 
-      // Send button/component info if exists
       if (message.components && message.components.length > 0) {
         await message.channel.send(`**[BOT EVENT]** Bot has ${message.components.length} component row(s) with buttons`);
         
@@ -312,7 +290,6 @@ class DebugManager {
             });
           }
 
-          // Split long button info if needed
           if (buttonInfo.length > 1900) {
             const chunks = buttonInfo.match(/.{1,1900}(\n|$)/g);
             for (const chunk of chunks) {
@@ -324,7 +301,6 @@ class DebugManager {
         }
       }
 
-      // If no content, embeds, or components, still log it
       if ((!message.content || !message.content.trim()) && 
           (!message.embeds || message.embeds.length === 0) &&
           (!message.components || message.components.length === 0)) {

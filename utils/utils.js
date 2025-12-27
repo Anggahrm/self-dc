@@ -23,10 +23,8 @@ class Utils {
 
       function onMessage(message) {
         if (message.author.id === botId && message.channel.id === originalMessage.channel.id) {
-          // Check if this is a "thinking" message (deferred response)
           if (message.flags && message.flags.has('LOADING')) {
-            console.log('🤔 Bot is thinking... waiting for actual response');
-            // Don't resolve yet, wait for the messageUpdate event
+            console.log('Bot is thinking... waiting for actual response');
             return;
           }
           
@@ -42,9 +40,8 @@ class Utils {
 
       function onUpdate(oldMsg, newMsg) {
         if (newMsg.author.id === botId && newMsg.channel.id === originalMessage.channel.id) {
-          // Check if this was previously a "thinking" message that now has content
           if (oldMsg.flags && oldMsg.flags.has('LOADING') && (!newMsg.flags || !newMsg.flags.has('LOADING'))) {
-            console.log('✅ Bot finished thinking, got actual response');
+            console.log('Bot finished thinking, got actual response');
             if (!done) {
               done = true;
               clearTimeout(timeoutId);
@@ -55,7 +52,6 @@ class Utils {
             return;
           }
           
-          // Handle regular message updates
           if (!done) {
             done = true;
             clearTimeout(timeoutId);
@@ -71,14 +67,6 @@ class Utils {
     });
   }
 
-  /**
-   * Enhanced slash command sender that handles "thinking" responses
-   * @param {Object} channel - Discord channel object
-   * @param {string} botId - Bot ID to send slash command to
-   * @param {string} command - Slash command name
-   * @param {Array} options - Optional slash command options
-   * @param {number} timeout - Timeout in milliseconds (default: 15 minutes for deferred responses)
-   */
   static async sendSlashAndWait(channel, botId, command, options = [], timeout = 15 * 60 * 1000) {
     try {
       const slashResponse = options.length > 0 
@@ -89,9 +77,8 @@ class Utils {
         throw new Error('Failed to send slash command');
       }
 
-      // Check if the response has LOADING flag (bot is thinking)
       if (slashResponse.flags && slashResponse.flags.has('LOADING')) {
-        console.log('🤔 Bot is thinking... waiting for actual response (up to 15 minutes)');
+        console.log('Bot is thinking... waiting for actual response (up to 15 minutes)');
         
         return new Promise((resolve, reject) => {
           let done = false;
@@ -109,7 +96,7 @@ class Utils {
                 done = true;
                 clearTimeout(timeoutId);
                 channel.client.off('messageUpdate', onUpdate);
-                console.log('✅ Bot finished thinking, got actual response');
+                console.log('Bot finished thinking, got actual response');
                 resolve(newMsg);
               }
             }
@@ -118,18 +105,16 @@ class Utils {
           channel.client.on('messageUpdate', onUpdate);
         });
       } else {
-        // Immediate response, return as-is
-        console.log('⚡ Got immediate bot response');
+        console.log('Got immediate bot response');
         return slashResponse;
       }
     } catch (error) {
-      console.error('❌ Error in sendSlashAndWait:', error);
+      console.error('Error in sendSlashAndWait:', error);
       throw error;
     }
   }
 
   static parseHP(content) {
-    // Parse HP from content like "Lost 32 HP, remaining HP is 41/105"
     const hpMatch = content.match(/remaining HP is (\d+)\/(\d+)/i);
     if (hpMatch) {
       return {
@@ -141,10 +126,6 @@ class Utils {
   }
 
   static parseCooldown(title) {
-    // Enhanced cooldown parsing to handle multiple formats:
-    // "wait at least **0h 40m 10s**" or "wait at least **40m 10s**" or "wait at least **10s**"
-    
-    // Try format with hours, minutes, and seconds
     let cooldownMatch = title.match(/wait at least \*{0,2}(\d+)h (\d+)m (\d+)s\*{0,2}/i);
     if (cooldownMatch) {
       const hours = parseInt(cooldownMatch[1]);
@@ -154,7 +135,6 @@ class Utils {
       return totalMs;
     }
 
-    // Try format with minutes and seconds only
     cooldownMatch = title.match(/wait at least \*{0,2}(\d+)m (\d+)s\*{0,2}/i);
     if (cooldownMatch) {
       const minutes = parseInt(cooldownMatch[1]);
@@ -163,7 +143,6 @@ class Utils {
       return totalMs;
     }
 
-    // Try format with seconds only
     cooldownMatch = title.match(/wait at least \*{0,2}(\d+)s\*{0,2}/i);
     if (cooldownMatch) {
       const seconds = parseInt(cooldownMatch[1]);
@@ -171,7 +150,6 @@ class Utils {
       return totalMs;
     }
 
-    // Try alternative format patterns
     cooldownMatch = title.match(/wait.*?(\d+)h.*?(\d+)m.*?(\d+)s/i);
     if (cooldownMatch) {
       const hours = parseInt(cooldownMatch[1]);
@@ -199,14 +177,12 @@ class Utils {
   }
 
   static checkForEpicGuard(botResponse) {
-    // Check in content
     if (botResponse.content && 
         (botResponse.content.includes('EPIC GUARD: stop there') || 
          botResponse.content.includes('We have to check you are actually playing'))) {
       return true;
     }
     
-    // Check in embeds
     if (botResponse.embeds && botResponse.embeds.length > 0) {
       for (const embed of botResponse.embeds) {
         if (embed.title && 

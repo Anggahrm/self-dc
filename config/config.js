@@ -1,32 +1,6 @@
 module.exports = {
   // Bot IDs
   EPIC_RPG_BOT_ID: '555955826880413696',
-  
-  // RPC Configuration
-  RPC: {
-    APPLICATION_ID: '1380551344515055667',
-    WORKSPACE_NAME: 'ZumyNext',
-    APP_NAME: 'Visual Studio Code',
-    PLATFORM: 'desktop',
-    STATUS: 'idle',
-    COMMUNITY_LINK: 'https://discord.gg/W9qD2mYXxf',
-    LARGE_IMAGE_URL: 'https://files.catbox.moe/nawqku.png',
-    SMALL_IMAGE_URL: 'https://cdn.discordapp.com/emojis/1410862047998246942.webp'
-  },
-
-  // File names for RPC presence
-  FILE_NAMES: [
-    'main.js',
-    'server.js',
-    'index.js',
-    'config.js',
-    'test.js',
-    'lib/baileys.js',
-    'lib/converter.js',
-    'lib/functions.js',
-    'lib/print.js',
-    'lib/simple.js'
-  ],
 
   // Farm cooldowns (in milliseconds)
   FARM_COOLDOWNS: {
