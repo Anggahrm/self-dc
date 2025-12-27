@@ -1,6 +1,5 @@
 require('dotenv').config();
 const Discord = require('discord.js-selfbot-v13');
-const { RPCManager } = require('./modules/rpc');
 const { FarmManager } = require('./modules/farm');
 const { EventHandler } = require('./modules/events');
 const { DebugManager } = require('./modules/debug');
@@ -12,24 +11,19 @@ const client = new Discord.Client({
 });
 
 // Initialize managers
-const rpcManager = new RPCManager(client);
 const farmManager = new FarmManager(client);
 const debugManager = new DebugManager(client);
 const eventHandler = new EventHandler(client);
 const messageHandler = new MessageHandler(client, {
-  rpcManager,
   farmManager,
   debugManager,
   eventHandler
 });
 
-client.on('ready', async () => {
-  console.log(`🔗 Logged in as: ${client.user.username}`);
+client.on('ready', () => {
+  console.log(`Logged in as: ${client.user.username}`);
   console.log('Selfbot ready!');
-  console.log('Commands: .on rpc, .off rpc, .on farm, .off farm, .farm status, .debug <command>, .on debug, .off debug');
-  console.log('Debug: Reply to bot messages with .debug to analyze them');
-
-  await rpcManager.initialize();
+  console.log('Commands: .on farm, .off farm, .farm status, .on event, .off event, .on debug, .off debug, .debug <command>');
 });
 
 client.on('messageCreate', async (message) => {
@@ -38,7 +32,6 @@ client.on('messageCreate', async (message) => {
 
 // Graceful shutdown
 process.on('exit', () => {
-  rpcManager.cleanup();
   farmManager.cleanup();
 });
 

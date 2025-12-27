@@ -3,43 +3,54 @@ const { EVENTS, EPIC_RPG_BOT_ID } = require('../config/config');
 class EventHandler {
   constructor(client) {
     this.client = client;
-    this.pendingMessages = new Map(); // Track messages that are still "thinking"
+    this.enabled = false; // Default OFF
+    this.currentChannel = null;
+    this.pendingMessages = new Map();
+  }
+
+  setEnabled(enabled) {
+    this.enabled = enabled;
+  }
+
+  isEnabled() {
+    return this.enabled;
+  }
+
+  setCurrentChannel(channel) {
+    this.currentChannel = channel;
   }
 
   async handleAutoEvent(message) {
+    if (!this.enabled) return;
     if (message.author.id !== EPIC_RPG_BOT_ID) return;
 
     // If this is a "thinking" message, store it and wait for the actual content
     if (message.flags && message.flags.has('LOADING')) {
-      console.log('🤔 Bot is thinking... storing message for event detection');
+      console.log('Bot is thinking... storing message for event detection');
       this.pendingMessages.set(message.id, message);
       
-      // Set up listener for when this message gets updated
       const onUpdate = (oldMsg, newMsg) => {
         if (oldMsg.id === message.id) {
-          console.log('✅ Bot finished thinking, checking for events...');
+          console.log('Bot finished thinking, checking for events...');
           message.client.off('messageUpdate', onUpdate);
           this.pendingMessages.delete(message.id);
-          // Process the updated message for events
           this.processEventDetection(newMsg);
         }
       };
       
       message.client.on('messageUpdate', onUpdate);
       
-      // Set timeout to clean up if message never gets updated (15 minutes)
       setTimeout(() => {
         if (this.pendingMessages.has(message.id)) {
           message.client.off('messageUpdate', onUpdate);
           this.pendingMessages.delete(message.id);
-          console.log('⚠️ Thinking message timeout, cleaning up');
+          console.log('Thinking message timeout, cleaning up');
         }
       }, 15 * 60 * 1000);
       
-      return; // Don't process yet, wait for the actual content
+      return;
     }
 
-    // Process immediate messages (not thinking)
     this.processEventDetection(message);
   }
 
@@ -48,42 +59,39 @@ class EventHandler {
 
     if (message.embeds && message.embeds.length > 0) {
       for (const embed of message.embeds) {
-        // Check each event type
         for (const [eventName, eventConfig] of Object.entries(EVENTS)) {
           const detectedEvent = this.detectEvent(embed, eventName, eventConfig);
           
           if (detectedEvent) {
             isAutoCatchEvent = true;
-            console.log(`${this.getEventEmoji(eventName)} ${eventName} EVENT DETECTED! Auto-responding...`);
+            console.log(`${eventName} EVENT DETECTED! Auto-responding...`);
 
             setTimeout(async () => {
               try {
-                // Try button click first if available
                 if (detectedEvent.BUTTON_ID && message.components && message.components.length > 0) {
                   await message.clickButton(detectedEvent.BUTTON_ID);
-                  console.log(`✅ Auto-${detectedEvent.RESPONSE} button clicked successfully`);
+                  console.log(`Auto-${detectedEvent.RESPONSE} button clicked successfully`);
                 } else if (message.components && message.components.length > 0) {
-                  // Try to find appropriate button
                   let buttonCustomId = await this.findEventButton(message, detectedEvent.RESPONSE);
                   
                   if (buttonCustomId) {
                     await message.clickButton(buttonCustomId);
-                    console.log(`✅ Auto-${detectedEvent.RESPONSE} button clicked successfully`);
+                    console.log(`Auto-${detectedEvent.RESPONSE} button clicked successfully`);
                   } else {
                     await message.channel.send(detectedEvent.RESPONSE);
-                    console.log(`✅ Auto-${detectedEvent.RESPONSE} typed successfully (no button found)`);
+                    console.log(`Auto-${detectedEvent.RESPONSE} typed successfully (no button found)`);
                   }
                 } else {
                   await message.channel.send(detectedEvent.RESPONSE);
-                  console.log(`✅ Auto-${detectedEvent.RESPONSE} typed successfully`);
+                  console.log(`Auto-${detectedEvent.RESPONSE} typed successfully`);
                 }
               } catch (error) {
-                console.error(`❌ ${detectedEvent.RESPONSE} failed:`, error.message);
+                console.error(`${detectedEvent.RESPONSE} failed:`, error.message);
                 try {
                   await message.channel.send(detectedEvent.RESPONSE);
-                  console.log(`✅ Auto-${detectedEvent.RESPONSE} typed successfully (fallback)`);
+                  console.log(`Auto-${detectedEvent.RESPONSE} typed successfully (fallback)`);
                 } catch (typeError) {
-                  console.error(`❌ Failed to auto-${detectedEvent.RESPONSE}:`, typeError);
+                  console.error(`Failed to auto-${detectedEvent.RESPONSE}:`, typeError);
                 }
               }
             }, 1000);
@@ -189,20 +197,6 @@ class EventHandler {
       }
     }
     return null;
-  }
-
-  getEventEmoji(eventName) {
-    const emojis = {
-      EPIC_COIN: '👾',
-      COIN_RAIN: '🪙',
-      EPIC_TREE: '🌳',
-      MEGALODON: '🦈',
-      ARENA: '⚔️',
-      MINIBOSS: '👹',
-      LOOTBOX_SUMMONING: '📦',
-      LEGENDARY_BOSS: '🐉'
-    };
-    return emojis[eventName] || '🎯';
   }
 }
 
