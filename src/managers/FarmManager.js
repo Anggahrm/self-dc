@@ -41,7 +41,8 @@ class FarmManager {
 
     const hpPercentage = (hpData.current / hpData.max) * 100;
 
-    if (hpPercentage < FARM.HEAL_HP_THRESHOLD || hpData.current < FARM.HEAL_HP_THRESHOLD) {
+    // Heal if HP percentage is low OR absolute HP is low
+    if (hpPercentage < FARM.HEAL_HP_PERCENT || hpData.current < FARM.HEAL_HP_MIN) {
       this.logger.warn(`HP low (${hpData.current}/${hpData.max} - ${Math.round(hpPercentage)}%), healing...`);
       await this.triggerHeal();
       await DiscordUtils.sleep(FARM.HEAL_DELAY);

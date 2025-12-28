@@ -17,7 +17,8 @@ module.exports = {
       axe: 300000,         // 5 minutes
       hunt: 60000,         // 1 minute
     },
-    HEAL_HP_THRESHOLD: 60, // Heal when HP below 60%
+    HEAL_HP_PERCENT: 60,   // Heal when HP below this percentage
+    HEAL_HP_MIN: 60,       // Also heal when HP below this absolute value
     RESPONSE_TIMEOUT: 15000,
     HEAL_DELAY: 2000,
     START_DELAY: 3000,
@@ -26,13 +27,20 @@ module.exports = {
   // Auto Enchant configuration
   ENCHANT: {
     // Enchant types and their unlock areas
+    // area: minimum area required to unlock this type
+    // priceMultiplier: cost multiplier compared to base enchant
     TYPES: {
       enchant: { area: 1, priceMultiplier: 1 },
       refine: { area: 7, priceMultiplier: 10 },
       transmute: { area: 13, priceMultiplier: 100 },
       transcend: { area: 15, priceMultiplier: 1000 },
     },
-    // Enchant tiers (in order of quality, worst to best)
+    /**
+     * Enchant tiers in order of quality (worst to best)
+     * - name: Display name of the enchant tier
+     * - bonus: AT/DEF bonus percentage (e.g., 40 = +40%)
+     * - timeTravel: Minimum time travel count required to unlock
+     */
     TIERS: [
       { name: 'NORMIE', bonus: 5, timeTravel: 0 },
       { name: 'GOOD', bonus: 15, timeTravel: 0 },

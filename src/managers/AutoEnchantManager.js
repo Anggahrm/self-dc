@@ -8,6 +8,18 @@ const { Logger } = require('../utils/logger');
 const { DiscordUtils } = require('../utils/discord');
 const { EPIC_RPG_BOT_ID, ENCHANT } = require('../config');
 
+// Pre-process tier names for efficient lookup
+const TIER_LOOKUP = new Map();
+const TIER_NAMES_UPPER = [];
+ENCHANT.TIERS.forEach((tier, index) => {
+  const normalizedName = tier.name.toLowerCase().replace(/[-_\s]/g, '');
+  TIER_LOOKUP.set(normalizedName, { ...tier, index });
+  TIER_NAMES_UPPER.push(tier.name);
+});
+
+// Regex pattern for parsing enchant result from bot response
+const ENCHANT_RESULT_PATTERN = /~-~>\s*\*{0,2}(\w+(?:-\w+)?)\*{0,2}\s*<~-~/i;
+
 class AutoEnchantManager {
   constructor(client) {
     this.client = client;
@@ -215,14 +227,11 @@ class AutoEnchantManager {
   }
 
   /**
-   * Find tier by name
+   * Find tier by name using optimized lookup
    */
   findTier(name) {
     const normalizedName = name.toLowerCase().replace(/[-_\s]/g, '');
-    return ENCHANT.TIERS.find(tier => {
-      const tierName = tier.name.toLowerCase().replace(/[-_\s]/g, '');
-      return tierName === normalizedName;
-    });
+    return TIER_LOOKUP.get(normalizedName);
   }
 
   /**
@@ -242,7 +251,7 @@ class AutoEnchantManager {
         if (embed.fields?.length) {
           for (const field of embed.fields) {
             // Look for the sparkles pattern with enchant name
-            const enchantMatch = field.name.match(/~-~>\s*\*{0,2}(\w+(?:-\w+)?)\*{0,2}\s*<~-~/i);
+            const enchantMatch = field.name.match(ENCHANT_RESULT_PATTERN);
             if (enchantMatch) {
               const enchantName = enchantMatch[1].toUpperCase();
               const tier = this.findTier(enchantName);
@@ -255,9 +264,10 @@ class AutoEnchantManager {
             }
 
             // Alternative pattern: check for tier name in field
-            for (const tier of ENCHANT.TIERS) {
-              if (field.name.toUpperCase().includes(tier.name) || 
-                  field.value.toUpperCase().includes(tier.name)) {
+            const fieldUpper = (field.name + ' ' + field.value).toUpperCase();
+            for (const tierName of TIER_NAMES_UPPER) {
+              if (fieldUpper.includes(tierName)) {
+                const tier = this.findTier(tierName);
                 return {
                   enchant: tier.name,
                   bonus: tier.bonus,
@@ -269,8 +279,10 @@ class AutoEnchantManager {
 
         // Check description
         if (embed.description) {
-          for (const tier of ENCHANT.TIERS) {
-            if (embed.description.toUpperCase().includes(tier.name)) {
+          const descUpper = embed.description.toUpperCase();
+          for (const tierName of TIER_NAMES_UPPER) {
+            if (descUpper.includes(tierName)) {
+              const tier = this.findTier(tierName);
               return {
                 enchant: tier.name,
                 bonus: tier.bonus,
@@ -288,15 +300,13 @@ class AutoEnchantManager {
    * Check if target enchant is reached (or better)
    */
   isTargetReached(currentEnchant, targetEnchant) {
-    const currentIdx = ENCHANT.TIERS.findIndex(t => 
-      t.name.toLowerCase() === currentEnchant.toLowerCase()
-    );
-    const targetIdx = ENCHANT.TIERS.findIndex(t => 
-      t.name.toLowerCase() === targetEnchant.toLowerCase()
-    );
+    const currentTier = this.findTier(currentEnchant);
+    const targetTier = this.findTier(targetEnchant);
+    
+    if (!currentTier || !targetTier) return false;
 
     // Current enchant index >= target index means equal or better
-    return currentIdx >= targetIdx;
+    return currentTier.index >= targetTier.index;
   }
 
   /**

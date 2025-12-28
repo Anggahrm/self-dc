@@ -11,9 +11,9 @@
 
 require('dotenv').config();
 const Discord = require('discord.js-selfbot-v13');
-const { Logger } = require('./src/utils');
-const { FarmManager, EventHandler, DebugManager, AutoEnchantManager } = require('./src/managers');
-const { CommandHandler } = require('./src/commands');
+const { Logger } = require('./utils');
+const { FarmManager, EventHandler, DebugManager, AutoEnchantManager } = require('./managers');
+const { CommandHandler } = require('./commands');
 
 // Initialize logger
 const logger = Logger.create('System');
