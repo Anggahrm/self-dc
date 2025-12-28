@@ -127,28 +127,52 @@ class AutoEnchantManager {
 
   /**
    * Main enchant loop
+   * Uses slash command only for the first attempt, then uses "ENCHANT AGAIN" button for subsequent attempts
    */
   async runEnchantLoop(session, sessionKey) {
+    // Store the last response message to use for button clicks
+    let lastResponse = null;
+
     while (session.running && this.sessions.has(sessionKey)) {
       try {
         session.attempts++;
         
         this.logger.command(session.type, `Attempt #${session.attempts} for ${session.equipment}`);
 
-        // Send enchant command
-        const response = await DiscordUtils.sendSlashAndWait(
-          session.channel,
-          EPIC_RPG_BOT_ID,
-          session.type,
-          [session.equipment],
-          ENCHANT.RESPONSE_TIMEOUT
-        );
+        let response;
+
+        // First attempt: use slash command
+        // Subsequent attempts: use "ENCHANT AGAIN" button if available
+        if (session.attempts === 1 || !lastResponse || !this.hasEnchantAgainButton(lastResponse)) {
+          // Send slash command
+          this.logger.debug('Using slash command');
+          response = await DiscordUtils.sendSlashAndWait(
+            session.channel,
+            EPIC_RPG_BOT_ID,
+            session.type,
+            [session.equipment],
+            ENCHANT.RESPONSE_TIMEOUT
+          );
+        } else {
+          // Click "ENCHANT AGAIN" button
+          this.logger.debug('Using ENCHANT AGAIN button');
+          response = await DiscordUtils.clickButtonAndWait(
+            lastResponse,
+            ENCHANT.BUTTON_ID,
+            EPIC_RPG_BOT_ID,
+            ENCHANT.RESPONSE_TIMEOUT
+          );
+        }
 
         if (!response) {
-          this.logger.warn('No response from bot, retrying...');
+          this.logger.warn('No response from bot, retrying with slash command...');
+          lastResponse = null; // Reset to use slash command next time
           await DiscordUtils.sleep(ENCHANT.RETRY_DELAY);
           continue;
         }
+
+        // Store response for next button click
+        lastResponse = response;
 
         // Check for EPIC Guard
         if (DiscordUtils.checkForEpicGuard(response)) {
@@ -165,6 +189,7 @@ class AutoEnchantManager {
           this.logger.warn(`Cooldown detected: ${Math.ceil(cooldownMs / 1000)}s`);
           await session.channel.send(`⏳ Cooldown: ${Math.ceil(cooldownMs / 1000)}s - waiting...`).catch(() => {});
           await DiscordUtils.sleep(cooldownMs + 2000);
+          lastResponse = null; // Reset to use slash command after cooldown
           continue;
         }
 
@@ -212,7 +237,8 @@ class AutoEnchantManager {
         this.logger.error(`Enchant error: ${error.message}`);
         
         if (error.message.includes('Timeout')) {
-          this.logger.warn('Bot response timeout, retrying...');
+          this.logger.warn('Bot response timeout, retrying with slash command...');
+          lastResponse = null; // Reset to use slash command on error
         } else {
           // Stop on unexpected errors
           await session.channel.send(`❌ Error: ${error.message}`).catch(() => {});
@@ -224,6 +250,24 @@ class AutoEnchantManager {
         await DiscordUtils.sleep(ENCHANT.RETRY_DELAY);
       }
     }
+  }
+
+  /**
+   * Check if message has the "ENCHANT AGAIN" button
+   * @param {Object} message - Discord message
+   * @returns {boolean} True if button exists and is not disabled
+   */
+  hasEnchantAgainButton(message) {
+    if (!message.components?.length) return false;
+    
+    for (const row of message.components) {
+      for (const comp of row.components || []) {
+        if (comp.customId === ENCHANT.BUTTON_ID && comp.disabled !== true) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**

@@ -64,6 +64,8 @@ module.exports = {
     RETRY_DELAY: 500,
     // Response timeout (ms)
     RESPONSE_TIMEOUT: 15000,
+    // Button ID for "ENCHANT AGAIN" button
+    BUTTON_ID: 'enchant_again',
   },
 
   // Event configuration

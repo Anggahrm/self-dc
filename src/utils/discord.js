@@ -228,6 +228,52 @@ class DiscordUtils {
   static formatNumber(num) {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   }
+
+  /**
+   * Click a button and wait for the bot's updated response
+   * @param {Object} message - Message containing the button
+   * @param {string} customId - Custom ID of the button to click
+   * @param {string} botId - Target bot ID
+   * @param {number} timeout - Timeout in milliseconds
+   * @returns {Promise<Object>} Bot response message
+   */
+  static async clickButtonAndWait(message, customId, botId, timeout = 15000) {
+    return new Promise((resolve, reject) => {
+      let done = false;
+
+      const timeoutId = setTimeout(() => {
+        if (!done) {
+          done = true;
+          message.client.off('messageUpdate', onUpdate);
+          reject(new Error('Timeout waiting for button response'));
+        }
+      }, timeout);
+
+      function onUpdate(oldMsg, newMsg) {
+        // Check if this is the same message being updated by the bot
+        if (newMsg.id === message.id && newMsg.author.id === botId) {
+          if (!done) {
+            done = true;
+            clearTimeout(timeoutId);
+            message.client.off('messageUpdate', onUpdate);
+            resolve(newMsg);
+          }
+        }
+      }
+
+      message.client.on('messageUpdate', onUpdate);
+
+      // Click the button after setting up the listener
+      message.clickButton(customId).catch(err => {
+        if (!done) {
+          done = true;
+          clearTimeout(timeoutId);
+          message.client.off('messageUpdate', onUpdate);
+          reject(err);
+        }
+      });
+    });
+  }
 }
 
 module.exports = { DiscordUtils };
