@@ -61,7 +61,7 @@ module.exports = {
     // Equipment types
     EQUIPMENT: ['sword', 'armor'],
     // Delay between enchant attempts (ms)
-    RETRY_DELAY: 500,
+    RETRY_DELAY: 1000,
     // Response timeout (ms)
     RESPONSE_TIMEOUT: 15000,
     // Button ID for "ENCHANT AGAIN" button
