@@ -4,14 +4,11 @@
   "description": "Discord self-bot for EPIC RPG automation",
   "main": "main.js",
   "scripts": {
-    "start": "node main.js"
+    "start": "bun main.js"
   },
   "dependencies": {
     "discord.js-selfbot-v13": "^3.5.2",
     "dotenv": "^16.3.1",
     "pg": "^8.11.3"
-  },
-  "engines": {
-    "node": ">=16.0.0"
   }
 }
