@@ -15,6 +15,7 @@ class CommandHandler {
     this.eventHandler = managers.eventHandler;
     this.debugManager = managers.debugManager;
     this.autoEnchantManager = managers.autoEnchantManager;
+    this.voiceManager = managers.voiceManager;
   }
 
   /**
@@ -88,6 +89,24 @@ class CommandHandler {
       return message.channel.send('🛑 **Auto Event Disabled**').catch(() => {});
     }
 
+    // Voice channel commands
+    if (lowerContent === '.on vc' || lowerContent.startsWith('.on vc ')) {
+      await message.delete().catch(() => {});
+      return await this.handleVoiceJoin(message, lowerContent);
+    }
+    
+    if (lowerContent === '.off vc') {
+      await message.delete().catch(() => {});
+      return await this.handleVoiceLeave(message);
+    }
+    
+    if (lowerContent === '.vc status') {
+      await message.delete().catch(() => {});
+      const guildId = message.guild?.id;
+      const status = this.voiceManager.getStatus(guildId);
+      return message.channel.send(status).catch(() => {});
+    }
+
     // Debug mode commands
     if (lowerContent === '.on debug') {
       await message.delete().catch(() => {});
@@ -135,6 +154,88 @@ class CommandHandler {
   }
 
   /**
+   * Handle voice join command
+   */
+  async handleVoiceJoin(message, lowerContent) {
+    // Parse optional channel ID from command
+    const parts = lowerContent.split(' ');
+    let targetChannel = null;
+    
+    if (parts.length > 2) {
+      // Channel ID provided
+      const channelId = parts[2];
+      targetChannel = this.client.channels.cache.get(channelId);
+      
+      if (!targetChannel || !targetChannel.isVoice()) {
+        return message.channel.send(`❌ Invalid voice channel ID: \`${channelId}\``).catch(() => {});
+      }
+    } else {
+      // No channel ID provided - try to get current voice channel from VoiceManager or guild
+      const guildId = message.guild?.id;
+      const currentConnection = guildId ? this.voiceManager.getConnectionStatus(guildId) : null;
+      
+      if (currentConnection) {
+        // Already connected to a voice channel
+        return message.channel.send([
+          '⚠️ **Already connected to a voice channel**',
+          '',
+          `📍 **Channel:** ${currentConnection.channelName}`,
+          'Use `.off vc` to disconnect first, or provide a different channel ID.',
+        ].join('\n')).catch(() => {});
+      }
+      
+      // Try to find a voice channel in the guild
+      return message.channel.send([
+        '❌ **No voice channel specified**',
+        '',
+        'Please provide a channel ID:',
+        '• `.on vc <channel_id>` - Join a specific voice channel',
+        '',
+        'You can get a channel ID by right-clicking a voice channel and selecting "Copy ID".',
+      ].join('\n')).catch(() => {});
+    }
+
+    const result = await this.voiceManager.joinChannel(targetChannel, true, true);
+    
+    if (result) {
+      return message.channel.send([
+        '🎤 **Auto Voice Enabled**',
+        '',
+        `📍 **Channel:** ${result.channelName}`,
+        `🏠 **Server:** ${result.guildName}`,
+        '🔇 **Self Mute:** Yes',
+        '🔈 **Self Deaf:** Yes',
+        '',
+        '*Will auto-reconnect if disconnected*',
+        'Use `.off vc` to leave',
+      ].join('\n')).catch(() => {});
+    } else {
+      return message.channel.send('❌ **Failed to join voice channel**').catch(() => {});
+    }
+  }
+
+  /**
+   * Handle voice leave command
+   */
+  async handleVoiceLeave(message) {
+    const guildId = message.guild?.id;
+    
+    if (!guildId) {
+      return message.channel.send('❌ **This command must be used in a server**').catch(() => {});
+    }
+
+    const wasConnected = this.voiceManager.isConnected(guildId);
+    
+    if (!wasConnected) {
+      return message.channel.send('❌ **Not connected to any voice channel in this server**').catch(() => {});
+    }
+
+    await this.voiceManager.disconnect(guildId);
+    
+    return message.channel.send('🔇 **Auto Voice Disabled** - Left voice channel').catch(() => {});
+  }
+
+  /**
    * Show help message
    */
   async showHelp(channel) {
@@ -149,6 +250,11 @@ class CommandHandler {
       '**🎯 Events:**',
       '• `.on event` - Enable auto event catch',
       '• `.off event` - Disable auto event catch',
+      '',
+      '**🎤 Voice Channel:**',
+      '• `.on vc <channel_id>` - Join voice channel & stay',
+      '• `.off vc` - Leave voice channel',
+      '• `.vc status` - Check voice status',
       '',
       '**🔍 Debug:**',
       '• `.on debug` - Enable debug logging',

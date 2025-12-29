@@ -6,13 +6,15 @@
  * - Auto Farm (adventure, axe, hunt with auto-heal)
  * - Auto Event Catch
  * - Auto Enchant (enchant/refine/transmute/transcend)
+ * - Auto Voice Channel Join & Stay
  * - Debug Mode
+ * - PostgreSQL Database Support
  */
 
 require('dotenv').config();
 const Discord = require('discord.js-selfbot-v13');
-const { Logger } = require('./utils');
-const { FarmManager, EventHandler, DebugManager, AutoEnchantManager } = require('./managers');
+const { Logger, database } = require('./utils');
+const { FarmManager, EventHandler, DebugManager, AutoEnchantManager, VoiceManager } = require('./managers');
 const { CommandHandler } = require('./commands');
 
 // Initialize logger
@@ -29,6 +31,7 @@ const farmManager = new FarmManager(client);
 const eventHandler = new EventHandler(client);
 const debugManager = new DebugManager(client);
 const autoEnchantManager = new AutoEnchantManager(client);
+const voiceManager = new VoiceManager(client);
 
 // Initialize command handler
 const commandHandler = new CommandHandler(client, {
@@ -36,11 +39,24 @@ const commandHandler = new CommandHandler(client, {
   eventHandler,
   debugManager,
   autoEnchantManager,
+  voiceManager,
 });
 
 // Ready event
-client.on('ready', () => {
+client.on('ready', async () => {
   logger.success(`Logged in as: ${client.user.username}`);
+  
+  // Initialize database
+  const dbConnected = await database.initDatabase();
+  if (dbConnected) {
+    logger.info('Database connected - data will be persisted');
+  } else {
+    logger.warn('Running without database - data will not persist');
+  }
+  
+  // Initialize voice manager (restore connections from database)
+  await voiceManager.initialize();
+  
   logger.info('Self bot ready!');
   logger.info('Use .help to see available commands');
 });
@@ -53,21 +69,24 @@ client.on('messageCreate', async (message) => {
 // Graceful shutdown
 process.on('exit', () => {
   logger.info('Shutting down...');
-  farmManager.cleanup();
-  autoEnchantManager.cleanup();
+  // Note: exit event cannot use async, cleanup is done in SIGINT/SIGTERM
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   logger.info('Received SIGINT, cleaning up...');
   farmManager.cleanup();
   autoEnchantManager.cleanup();
+  await voiceManager.cleanup();
+  await database.closeDatabase();
   process.exit(0);
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('Received SIGTERM, cleaning up...');
   farmManager.cleanup();
   autoEnchantManager.cleanup();
+  await voiceManager.cleanup();
+  await database.closeDatabase();
   process.exit(0);
 });
 
