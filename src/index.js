@@ -67,12 +67,9 @@ client.on('messageCreate', async (message) => {
 });
 
 // Graceful shutdown
-process.on('exit', async () => {
+process.on('exit', () => {
   logger.info('Shutting down...');
-  farmManager.cleanup();
-  autoEnchantManager.cleanup();
-  await voiceManager.cleanup();
-  await database.closeDatabase();
+  // Note: exit event cannot use async, cleanup is done in SIGINT/SIGTERM
 });
 
 process.on('SIGINT', async () => {

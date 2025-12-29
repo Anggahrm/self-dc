@@ -128,41 +128,51 @@ class VoiceManager {
   setupReconnectHandler(connection, channel, selfMute, selfDeaf) {
     const guildId = channel.guild.id;
 
-    connection.on('disconnect', async () => {
+    connection.on('disconnect', () => {
       this.logger.warn(`Disconnected from ${channel.name}, attempting reconnect...`);
       
-      // Get current reconnect attempts
-      const attempts = this.reconnectAttempts.get(guildId) || 0;
-      
-      if (attempts >= this.maxReconnectAttempts) {
-        this.logger.error(`Max reconnect attempts reached for ${channel.name}`);
-        this.connections.delete(guildId);
-        this.reconnectAttempts.delete(guildId);
-        return;
-      }
-
-      this.reconnectAttempts.set(guildId, attempts + 1);
-
-      // Wait before reconnecting
-      await new Promise(resolve => setTimeout(resolve, this.reconnectDelay));
-
-      // Check if we should still be connected
-      const savedConnection = this.connections.get(guildId);
-      if (!savedConnection || savedConnection.channelId !== channel.id) {
-        this.logger.debug('Connection was intentionally closed, not reconnecting');
-        return;
-      }
-
-      // Try to reconnect
-      try {
-        const freshChannel = this.client.channels.cache.get(channel.id);
-        if (freshChannel && freshChannel.isVoice()) {
-          await this.joinChannel(freshChannel, selfMute, selfDeaf, false);
-        }
-      } catch (error) {
-        this.logger.error(`Reconnect failed: ${error.message}`);
-      }
+      // Handle reconnection asynchronously with proper error handling
+      this.handleReconnect(guildId, channel, selfMute, selfDeaf).catch(error => {
+        this.logger.error(`Reconnection error: ${error.message}`);
+      });
     });
+  }
+
+  /**
+   * Handle reconnection logic
+   */
+  async handleReconnect(guildId, channel, selfMute, selfDeaf) {
+    // Get current reconnect attempts
+    const attempts = this.reconnectAttempts.get(guildId) || 0;
+    
+    if (attempts >= this.maxReconnectAttempts) {
+      this.logger.error(`Max reconnect attempts reached for ${channel.name}`);
+      this.connections.delete(guildId);
+      this.reconnectAttempts.delete(guildId);
+      return;
+    }
+
+    this.reconnectAttempts.set(guildId, attempts + 1);
+
+    // Wait before reconnecting
+    await new Promise(resolve => setTimeout(resolve, this.reconnectDelay));
+
+    // Check if we should still be connected
+    const savedConnection = this.connections.get(guildId);
+    if (!savedConnection || savedConnection.channelId !== channel.id) {
+      this.logger.debug('Connection was intentionally closed, not reconnecting');
+      return;
+    }
+
+    // Try to reconnect
+    try {
+      const freshChannel = this.client.channels.cache.get(channel.id);
+      if (freshChannel && freshChannel.isVoice()) {
+        await this.joinChannel(freshChannel, selfMute, selfDeaf, false);
+      }
+    } catch (error) {
+      this.logger.error(`Reconnect failed: ${error.message}`);
+    }
   }
 
   /**

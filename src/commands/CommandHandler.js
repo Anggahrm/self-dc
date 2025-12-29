@@ -157,13 +157,9 @@ class CommandHandler {
    * Handle voice join command
    */
   async handleVoiceJoin(message, lowerContent) {
-    // Check if user is in a voice channel
-    const member = message.guild?.members?.cache?.get(this.client.user.id);
-    const voiceChannel = member?.voice?.channel;
-    
     // Parse optional channel ID from command
     const parts = lowerContent.split(' ');
-    let targetChannel = voiceChannel;
+    let targetChannel = null;
     
     if (parts.length > 2) {
       // Channel ID provided
@@ -173,15 +169,29 @@ class CommandHandler {
       if (!targetChannel || !targetChannel.isVoice()) {
         return message.channel.send(`❌ Invalid voice channel ID: \`${channelId}\``).catch(() => {});
       }
-    }
-    
-    if (!targetChannel) {
+    } else {
+      // No channel ID provided - try to get current voice channel from VoiceManager or guild
+      const guildId = message.guild?.id;
+      const currentConnection = guildId ? this.voiceManager.getConnectionStatus(guildId) : null;
+      
+      if (currentConnection) {
+        // Already connected to a voice channel
+        return message.channel.send([
+          '⚠️ **Already connected to a voice channel**',
+          '',
+          `📍 **Channel:** ${currentConnection.channelName}`,
+          'Use `.off vc` to disconnect first, or provide a different channel ID.',
+        ].join('\n')).catch(() => {});
+      }
+      
+      // Try to find a voice channel in the guild
       return message.channel.send([
         '❌ **No voice channel specified**',
         '',
-        'Either join a voice channel first, or provide a channel ID:',
-        '• `.on vc` - Join your current voice channel',
+        'Please provide a channel ID:',
         '• `.on vc <channel_id>` - Join a specific voice channel',
+        '',
+        'You can get a channel ID by right-clicking a voice channel and selecting "Copy ID".',
       ].join('\n')).catch(() => {});
     }
 
@@ -242,8 +252,7 @@ class CommandHandler {
       '• `.off event` - Disable auto event catch',
       '',
       '**🎤 Voice Channel:**',
-      '• `.on vc` - Join your current voice channel & stay',
-      '• `.on vc <channel_id>` - Join specific voice channel',
+      '• `.on vc <channel_id>` - Join voice channel & stay',
       '• `.off vc` - Leave voice channel',
       '• `.vc status` - Check voice status',
       '',

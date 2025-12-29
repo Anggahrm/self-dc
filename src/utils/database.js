@@ -26,7 +26,9 @@ async function initDatabase() {
   try {
     pool = new Pool({
       connectionString: databaseUrl,
-      ssl: databaseUrl.includes('localhost') ? false : { rejectUnauthorized: false },
+      ssl: databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1') 
+        ? false 
+        : { rejectUnauthorized: process.env.DATABASE_SSL_VERIFY !== 'false' },
       max: 5,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
@@ -119,7 +121,8 @@ async function getSetting(key, defaultValue = null) {
     if (result.rows.length > 0) {
       try {
         return JSON.parse(result.rows[0].value);
-      } catch {
+      } catch (parseError) {
+        // Value is not JSON, return as string
         return result.rows[0].value;
       }
     }
