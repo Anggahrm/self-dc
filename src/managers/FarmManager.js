@@ -3,23 +3,18 @@
  * Handles automatic farming commands (adventure, axe, hunt, heal)
  */
 
-const { Logger } = require('../utils/logger');
 const { DiscordUtils } = require('../utils/discord');
 const { EPIC_RPG_BOT_ID, FARM } = require('../config');
 
 class FarmManager {
   constructor(client) {
     this.client = client;
-    this.logger = Logger.create('Farm');
+    this.logger = require('../utils/logger').Logger.create('Farm');
     this.enabled = false;
     this.channel = null;
 
-    // Timers for each command
-    this.timers = {
-      adventure: null,
-      axe: null,
-      hunt: null,
-    };
+    // Timers for each command - now using Map for consistency
+    this.timers = new Map();
 
     // State tracking for each command
     this.states = {
@@ -153,21 +148,38 @@ class FarmManager {
     this.states[command].onCooldown = true;
 
     // Clear existing timer
-    if (this.timers[command]) {
-      clearTimeout(this.timers[command]);
-      this.timers[command] = null;
-    }
+    this.clearCommandTimer(command);
 
-    // Schedule next execution after cooldown
-    this.timers[command] = setTimeout(async () => {
+    // Schedule next execution after cooldown using managed timer
+    const timerName = `cooldown_${command}`;
+    const timer = setTimeout(async () => {
+      this.timers.delete(timerName);
       this.states[command].onCooldown = false;
       if (this.states[command].enabled && this.enabled) {
-        await this.executeCommand(command);
-        if (this.states[command].enabled && this.enabled) {
-          this.scheduleNext(command);
+        try {
+          await this.executeCommand(command);
+          if (this.states[command].enabled && this.enabled) {
+            this.scheduleNext(command);
+          }
+        } catch (error) {
+          this.logger.error(`Cooldown execution error for ${command}: ${error.message}`);
         }
       }
     }, cooldownMs + 2000);
+
+    this.timers.set(timerName, timer);
+  }
+
+  /**
+   * Clear a command timer
+   */
+  clearCommandTimer(command) {
+    const timerName = `cooldown_${command}`;
+    const timer = this.timers.get(timerName);
+    if (timer) {
+      clearTimeout(timer);
+      this.timers.delete(timerName);
+    }
   }
 
   /**
@@ -176,7 +188,7 @@ class FarmManager {
   async handleEpicGuard() {
     this.logger.error('EPIC GUARD DETECTED! Auto-stopping farm for safety');
     if (this.channel) {
-      await this.channel.send('⚠️ **EPIC GUARD DETECTED!** Farm stopped automatically for safety.').catch(() => {});
+      await DiscordUtils.safeSend(this.channel, '⚠️ **EPIC GUARD DETECTED!** Farm stopped automatically for safety.');
     }
     this.stop();
   }
@@ -202,18 +214,27 @@ class FarmManager {
     const cooldown = FARM.COOLDOWNS[command];
     if (!cooldown) return;
 
-    if (this.timers[command]) {
-      clearTimeout(this.timers[command]);
+    const timerName = `schedule_${command}`;
+    const existingTimer = this.timers.get(timerName);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
     }
 
-    this.timers[command] = setTimeout(async () => {
+    const timer = setTimeout(async () => {
+      this.timers.delete(timerName);
       if (this.states[command].enabled && this.enabled) {
-        await this.executeCommand(command);
-        if (this.states[command].enabled && this.enabled) {
-          this.scheduleNext(command);
+        try {
+          await this.executeCommand(command);
+          if (this.states[command].enabled && this.enabled) {
+            this.scheduleNext(command);
+          }
+        } catch (error) {
+          this.logger.error(`Schedule execution error for ${command}: ${error.message}`);
         }
       }
     }, cooldown);
+
+    this.timers.set(timerName, timer);
   }
 
   /**
@@ -231,6 +252,8 @@ class FarmManager {
       if (this.states[command].enabled && this.enabled) {
         this.scheduleNext(command);
       }
+    }).catch(error => {
+      this.logger.error(`Start command error for ${command}: ${error.message}`);
     });
   }
 
@@ -243,9 +266,12 @@ class FarmManager {
     this.states[command].enabled = false;
     this.states[command].onCooldown = false;
 
-    if (this.timers[command]) {
-      clearTimeout(this.timers[command]);
-      this.timers[command] = null;
+    this.clearCommandTimer(command);
+
+    const scheduleTimer = this.timers.get(`schedule_${command}`);
+    if (scheduleTimer) {
+      clearTimeout(scheduleTimer);
+      this.timers.delete(`schedule_${command}`);
     }
 
     this.logger.info(`${command} timer stopped`);
@@ -264,7 +290,7 @@ class FarmManager {
     this.channel = channel;
     this.logger.success('Auto Farm Started');
 
-    await channel.send('🌾 **Auto Farm Started**\nRunning: adventure, axe, hunt with auto-heal').catch(() => {});
+    await DiscordUtils.safeSend(channel, '🌾 **Auto Farm Started**\nRunning: adventure, axe, hunt with auto-heal');
 
     // Initial heal
     await this.triggerHeal();
@@ -296,7 +322,7 @@ class FarmManager {
     this.logger.success('Auto Farm Stopped');
 
     if (this.channel) {
-      this.channel.send('🛑 **Auto Farm Stopped**').catch(() => {});
+      DiscordUtils.safeSend(this.channel, '🛑 **Auto Farm Stopped**');
     }
   }
 
@@ -334,9 +360,11 @@ class FarmManager {
    * Cleanup timers
    */
   cleanup() {
-    Object.values(this.timers).forEach(timer => {
-      if (timer) clearTimeout(timer);
-    });
+    for (const [name, timer] of this.timers) {
+      clearTimeout(timer);
+      this.logger.debug(`Cleaned up timer: ${name}`);
+    }
+    this.timers.clear();
   }
 
   /**

@@ -3,38 +3,12 @@
  * Handles automatic event detection and response (catching events)
  */
 
-const { Logger } = require('../utils/logger');
-const { EPIC_RPG_BOT_ID, EVENTS, TIMEOUTS } = require('../config');
+const { BaseManager } = require('./BaseManager');
+const { EPIC_RPG_BOT_ID, EVENTS } = require('../config');
 
-class EventHandler {
+class EventHandler extends BaseManager {
   constructor(client) {
-    this.client = client;
-    this.logger = Logger.create('Event');
-    this.enabled = false;
-    this.channel = null;
-    this.pendingMessages = new Map();
-  }
-
-  /**
-   * Enable/disable event handler
-   */
-  setEnabled(enabled) {
-    this.enabled = enabled;
-    this.logger.info(`Auto Event ${enabled ? 'Enabled' : 'Disabled'}`);
-  }
-
-  /**
-   * Check if event handler is enabled
-   */
-  isEnabled() {
-    return this.enabled;
-  }
-
-  /**
-   * Set current channel
-   */
-  setChannel(channel) {
-    this.channel = channel;
+    super(client, 'Event');
   }
 
   /**
@@ -47,26 +21,33 @@ class EventHandler {
     // Handle "thinking" messages
     if (message.flags?.has('LOADING')) {
       this.logger.debug('Bot thinking, waiting for content...');
-      this.pendingMessages.set(message.id, message);
 
+      // Use BaseManager's registerPendingMessage for proper cleanup
+      const resolver = this.registerPendingMessage(
+        message.id,
+        message,
+        (newMsg) => {
+          this.logger.debug('Bot finished thinking, checking for events');
+          this.processEventDetection(newMsg);
+        },
+        900000 // 15 minutes timeout
+      );
+
+      // Set up the event listener
       const onUpdate = (oldMsg, newMsg) => {
         if (oldMsg.id === message.id) {
-          this.logger.debug('Bot finished thinking, checking for events');
-          message.client.off('messageUpdate', onUpdate);
-          this.pendingMessages.delete(message.id);
-          this.processEventDetection(newMsg);
+          resolver(newMsg);
         }
       };
 
       message.client.on('messageUpdate', onUpdate);
 
-      // Cleanup timeout
-      setTimeout(() => {
-        if (this.pendingMessages.has(message.id)) {
-          message.client.off('messageUpdate', onUpdate);
-          this.pendingMessages.delete(message.id);
-        }
-      }, TIMEOUTS.THINKING_CLEANUP);
+      // Clean up listener when resolved
+      const originalCleanup = this.pendingMessages.get(message.id)?.cleanup;
+      this.pendingMessages.get(message.id).cleanup = () => {
+        message.client.off('messageUpdate', onUpdate);
+        originalCleanup?.();
+      };
 
       return;
     }

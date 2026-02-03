@@ -4,6 +4,7 @@
  */
 
 const { Logger } = require('../utils/logger');
+const { DiscordUtils } = require('../utils/discord');
 const { 
   getVoiceSettings, 
   setVoiceSettings, 
@@ -381,15 +382,7 @@ class VoiceManager {
    * @returns {string}
    */
   formatDuration(seconds) {
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) {
-      const mins = Math.floor(seconds / 60);
-      const secs = seconds % 60;
-      return `${mins}m ${secs}s`;
-    }
-    const hours = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    return `${hours}h ${mins}m`;
+    return DiscordUtils.formatDuration(seconds);
   }
 
   /**
