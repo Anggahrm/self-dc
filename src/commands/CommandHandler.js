@@ -195,14 +195,27 @@ class CommandHandler {
       ].join('\n')).catch(() => {});
     }
 
+    // Send processing message first
+    const processingMsg = await message.channel.send('🔄 **Joining voice channel...**').catch(() => null);
+    
     const result = await this.voiceManager.joinChannel(targetChannel, true, true);
     
-    if (result) {
+    // Delete processing message if it exists
+    if (processingMsg) {
+      await processingMsg.delete().catch(() => {});
+    }
+    
+    // Check connection status directly as fallback
+    const guildId = message.guild?.id;
+    const connectionStatus = guildId ? this.voiceManager.getConnectionStatus(guildId) : null;
+    
+    if (result || connectionStatus) {
+      const status = result || connectionStatus;
       return message.channel.send([
         '🎤 **Auto Voice Enabled**',
         '',
-        `📍 **Channel:** ${result.channelName}`,
-        `🏠 **Server:** ${result.guildName}`,
+        `📍 **Channel:** ${status.channelName}`,
+        `🏠 **Server:** ${status.guildName}`,
         '🔇 **Self Mute:** Yes',
         '🔈 **Self Deaf:** Yes',
         '',

@@ -83,12 +83,50 @@ class VoiceManager {
         await this.disconnect(guildId, false);
       }
 
+      // Wait a bit to ensure clean disconnect
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       // Join the voice channel
       const connection = await this.client.voice.joinChannel(channel, {
         selfMute,
         selfDeaf,
         selfVideo: false,
       });
+
+      // Wait for connection to be ready with timeout
+      const connectionReady = await new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          resolve(false);
+        }, 10000);
+
+        // Check if already ready
+        if (connection.readyState === 'open') {
+          clearTimeout(timeout);
+          resolve(true);
+          return;
+        }
+
+        // Wait for ready event
+        connection.once('ready', () => {
+          clearTimeout(timeout);
+          resolve(true);
+        });
+
+        connection.once('error', () => {
+          clearTimeout(timeout);
+          resolve(false);
+        });
+
+        connection.once('disconnect', () => {
+          clearTimeout(timeout);
+          resolve(false);
+        });
+      });
+
+      if (!connectionReady) {
+        this.logger.warn('Voice connection did not become ready in time, but may still work');
+        // Continue anyway - sometimes connection works even if ready event doesn't fire
+      }
 
       // Store connection info
       const connectionInfo = {
@@ -128,13 +166,52 @@ class VoiceManager {
   setupReconnectHandler(connection, channel, selfMute, selfDeaf) {
     const guildId = channel.guild.id;
 
+    // Keep-alive: send speaking update every 30 seconds to prevent idle disconnect
+    const keepAliveInterval = setInterval(() => {
+      try {
+        if (connection && connection.readyState === 'open') {
+          // Send speaking update to keep connection alive
+          connection.setSpeaking({
+            speaking: { value: 0 },
+            delay: 0,
+            ssrc: 0,
+          });
+        }
+      } catch (error) {
+        this.logger.debug(`Keep-alive failed for ${channel.name}: ${error.message}`);
+      }
+    }, 30000);
+
+    // Store interval for cleanup
+    connection._keepAliveInterval = keepAliveInterval;
+
     connection.on('disconnect', () => {
       this.logger.warn(`Disconnected from ${channel.name}, attempting reconnect...`);
+      
+      // Clear keep-alive interval
+      if (connection._keepAliveInterval) {
+        clearInterval(connection._keepAliveInterval);
+        connection._keepAliveInterval = null;
+      }
       
       // Handle reconnection asynchronously with proper error handling
       this.handleReconnect(guildId, channel, selfMute, selfDeaf).catch(error => {
         this.logger.error(`Reconnection error: ${error.message}`);
       });
+    });
+
+    // Handle connection errors
+    connection.on('error', (error) => {
+      this.logger.error(`Voice connection error in ${channel.name}: ${error.message}`);
+    });
+
+    // Handle connection close
+    connection.on('close', () => {
+      this.logger.warn(`Voice connection closed for ${channel.name}`);
+      if (connection._keepAliveInterval) {
+        clearInterval(connection._keepAliveInterval);
+        connection._keepAliveInterval = null;
+      }
     });
   }
 
@@ -154,8 +231,10 @@ class VoiceManager {
 
     this.reconnectAttempts.set(guildId, attempts + 1);
 
-    // Wait before reconnecting
-    await new Promise(resolve => setTimeout(resolve, this.reconnectDelay));
+    // Wait before reconnecting with exponential backoff
+    const delay = this.reconnectDelay * Math.pow(1.5, attempts);
+    this.logger.info(`Waiting ${Math.round(delay / 1000)}s before reconnect attempt ${attempts + 1}...`);
+    await new Promise(resolve => setTimeout(resolve, delay));
 
     // Check if we should still be connected
     const savedConnection = this.connections.get(guildId);
@@ -164,14 +243,31 @@ class VoiceManager {
       return;
     }
 
-    // Try to reconnect
+    // Try to reconnect with fresh channel reference
     try {
+      // Refresh channel from cache
       const freshChannel = this.client.channels.cache.get(channel.id);
-      if (freshChannel && freshChannel.isVoice()) {
-        await this.joinChannel(freshChannel, selfMute, selfDeaf, false);
+      if (!freshChannel || !freshChannel.isVoice()) {
+        this.logger.warn(`Channel ${channel.id} no longer exists or is not a voice channel`);
+        // Keep trying - channel might come back
+        if (attempts < this.maxReconnectAttempts - 1) {
+          setTimeout(() => this.handleReconnect(guildId, channel, selfMute, selfDeaf), this.reconnectDelay);
+        }
+        return;
+      }
+
+      const result = await this.joinChannel(freshChannel, selfMute, selfDeaf, false);
+      if (result) {
+        this.logger.success(`Successfully reconnected to ${freshChannel.name}`);
+      } else {
+        throw new Error('joinChannel returned null');
       }
     } catch (error) {
       this.logger.error(`Reconnect failed: ${error.message}`);
+      // Schedule another reconnect attempt
+      if (attempts < this.maxReconnectAttempts - 1) {
+        setTimeout(() => this.handleReconnect(guildId, channel, selfMute, selfDeaf), this.reconnectDelay);
+      }
     }
   }
 
@@ -189,6 +285,12 @@ class VoiceManager {
     }
 
     try {
+      // Clear keep-alive interval if exists
+      if (connectionInfo.connection && connectionInfo.connection._keepAliveInterval) {
+        clearInterval(connectionInfo.connection._keepAliveInterval);
+        connectionInfo.connection._keepAliveInterval = null;
+      }
+
       // Disconnect the voice connection
       if (connectionInfo.connection) {
         connectionInfo.connection.disconnect();
@@ -296,7 +398,12 @@ class VoiceManager {
   async cleanup() {
     this.logger.info('Cleaning up voice connections...');
     
-    for (const [guildId] of this.connections) {
+    for (const [guildId, connectionInfo] of this.connections) {
+      // Clear keep-alive interval
+      if (connectionInfo.connection && connectionInfo.connection._keepAliveInterval) {
+        clearInterval(connectionInfo.connection._keepAliveInterval);
+        connectionInfo.connection._keepAliveInterval = null;
+      }
       await this.disconnect(guildId, false);
     }
     
