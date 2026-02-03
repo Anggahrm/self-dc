@@ -167,6 +167,20 @@ class CommandHandler {
       }
     );
 
+    // Health/Status command
+    registry.register(
+      {
+        name: '.status',
+        description: 'Show bot health status and metrics',
+        category: 'Debug',
+        aliases: ['.health', '.stats'],
+      },
+      async (message, args, handler) => {
+        const status = handler.client.monitoring.formatHealthStatus();
+        await DiscordUtils.safeSend(message.channel, status);
+      }
+    );
+
     // Debug command (special - handles replies and subcommands)
     registry.register(
       {
@@ -320,9 +334,11 @@ class CommandHandler {
     // Execute command
     try {
       this.logger.debug(`Executing: ${command.name}`);
+      this.client.monitoring.recordCommand();
       await command.handler(message, args, this);
     } catch (error) {
       this.logger.error(`Command error (${command.name}): ${error.message}`);
+      this.client.monitoring.recordError();
     }
   }
 

@@ -1,7 +1,7 @@
 /**
  * EPIC RPG Self Bot
  * A Discord self-bot for automating EPIC RPG tasks
- * 
+ *
  * Features:
  * - Auto Farm (adventure, axe, hunt with auto-heal)
  * - Auto Event Catch
@@ -9,11 +9,12 @@
  * - Auto Voice Channel Join & Stay
  * - Debug Mode
  * - PostgreSQL Database Support
+ * - Health Monitoring
  */
 
 require('dotenv').config();
 const Discord = require('discord.js-selfbot-v13');
-const { Logger, database } = require('./utils');
+const { Logger, database, ErrorHandler, Monitoring } = require('./utils');
 const { FarmManager, EventHandler, DebugManager, AutoEnchantManager, VoiceManager } = require('./managers');
 const { CommandHandler } = require('./commands');
 
@@ -25,6 +26,14 @@ const client = new Discord.Client({
   readyStatus: false,
   checkUpdate: false,
 });
+
+// Initialize error handler
+const errorHandler = new ErrorHandler(client);
+errorHandler.initialize();
+
+// Initialize monitoring
+const monitoring = new Monitoring(client);
+monitoring.initialize();
 
 // Initialize managers
 const farmManager = new FarmManager(client);
@@ -42,10 +51,14 @@ const commandHandler = new CommandHandler(client, {
   voiceManager,
 });
 
+// Make monitoring accessible globally for commands
+client.monitoring = monitoring;
+client.errorHandler = errorHandler;
+
 // Ready event
 client.on('ready', async () => {
   logger.success(`Logged in as: ${client.user.username}`);
-  
+
   // Initialize database
   const dbConnected = await database.initDatabase();
   if (dbConnected) {
@@ -53,16 +66,21 @@ client.on('ready', async () => {
   } else {
     logger.warn('Running without database - data will not persist');
   }
-  
+
   // Initialize voice manager (restore connections from database)
   await voiceManager.initialize();
-  
+
+  // Log initial health status
+  const health = monitoring.getHealthStatus();
+  logger.info(`Health status: ${health.status}`);
+
   logger.info('Self bot ready!');
   logger.info('Use .help to see available commands');
 });
 
 // Message event
 client.on('messageCreate', async (message) => {
+  monitoring.recordMessage();
   await commandHandler.handle(message);
 });
 
