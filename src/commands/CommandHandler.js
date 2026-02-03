@@ -1,11 +1,12 @@
 /**
  * Command Handler
- * Handles user command parsing and execution
+ * Handles user command parsing and execution using Command Registry
  */
 
 const { Logger } = require('../utils/logger');
 const { DiscordUtils } = require('../utils/discord');
 const { ValidationUtils } = require('../utils/validation');
+const { registry } = require('./CommandRegistry');
 const { PREFIX, EPIC_RPG_BOT_ID } = require('../config');
 
 class CommandHandler {
@@ -18,6 +19,264 @@ class CommandHandler {
     this.debugManager = managers.debugManager;
     this.autoEnchantManager = managers.autoEnchantManager;
     this.voiceManager = managers.voiceManager;
+
+    // Register all commands
+    this.registerCommands();
+  }
+
+  /**
+   * Register all commands to the registry
+   */
+  registerCommands() {
+    // Farm Commands
+    registry.register(
+      {
+        name: '.on farm',
+        description: 'Start auto farm (adventure, axe, hunt with auto-heal)',
+        category: 'Farm',
+        aliases: ['.farm on'],
+      },
+      async (message, args, handler) => {
+        await handler.farmManager.start(message.channel);
+      }
+    );
+
+    registry.register(
+      {
+        name: '.off farm',
+        description: 'Stop auto farm',
+        category: 'Farm',
+        aliases: ['.farm off'],
+      },
+      async (message, args, handler) => {
+        handler.farmManager.setChannel(message.channel);
+        handler.farmManager.stop();
+      }
+    );
+
+    registry.register(
+      {
+        name: '.farm status',
+        description: 'Check farm status',
+        category: 'Farm',
+      },
+      async (message, args, handler) => {
+        const status = handler.farmManager.getStatus();
+        await DiscordUtils.safeSend(message.channel, status);
+      }
+    );
+
+    // Event Commands
+    registry.register(
+      {
+        name: '.on event',
+        description: 'Enable auto event catch',
+        category: 'Events',
+        aliases: ['.event on'],
+      },
+      async (message, args, handler) => {
+        handler.eventHandler.setChannel(message.channel);
+        handler.eventHandler.setEnabled(true);
+        await DiscordUtils.safeSend(message.channel, '🎯 **Auto Event Enabled**');
+      }
+    );
+
+    registry.register(
+      {
+        name: '.off event',
+        description: 'Disable auto event catch',
+        category: 'Events',
+        aliases: ['.event off'],
+      },
+      async (message, args, handler) => {
+        handler.eventHandler.setChannel(message.channel);
+        handler.eventHandler.setEnabled(false);
+        await DiscordUtils.safeSend(message.channel, '🛑 **Auto Event Disabled**');
+      }
+    );
+
+    // Voice Commands
+    registry.register(
+      {
+        name: '.on vc',
+        description: 'Join voice channel & stay',
+        category: 'Voice',
+        aliases: ['.vc on', '.voice on'],
+        args: [
+          { name: 'channel_id', description: 'Voice channel ID (optional)', required: false },
+        ],
+        examples: ['.on vc', '.on vc 123456789012345678'],
+        guildOnly: true,
+      },
+      async (message, args, handler) => {
+        await handler.handleVoiceJoin(message, args[0]);
+      }
+    );
+
+    registry.register(
+      {
+        name: '.off vc',
+        description: 'Leave voice channel',
+        category: 'Voice',
+        aliases: ['.vc off', '.voice off'],
+        guildOnly: true,
+      },
+      async (message, args, handler) => {
+        await handler.handleVoiceLeave(message);
+      }
+    );
+
+    registry.register(
+      {
+        name: '.vc status',
+        description: 'Check voice status',
+        category: 'Voice',
+        guildOnly: true,
+      },
+      async (message, args, handler) => {
+        const guildId = message.guild?.id;
+        const status = handler.voiceManager.getStatus(guildId);
+        await DiscordUtils.safeSend(message.channel, status);
+      }
+    );
+
+    // Debug Commands
+    registry.register(
+      {
+        name: '.on debug',
+        description: 'Enable debug logging',
+        category: 'Debug',
+      },
+      async (message, args, handler) => {
+        handler.debugManager.setChannel(message.channel);
+        handler.debugManager.setEnabled(true);
+        await DiscordUtils.safeSend(message.channel, '🔍 **Debug Mode Enabled** - Bot messages will be logged');
+      }
+    );
+
+    registry.register(
+      {
+        name: '.off debug',
+        description: 'Disable debug logging',
+        category: 'Debug',
+      },
+      async (message, args, handler) => {
+        handler.debugManager.setChannel(message.channel);
+        handler.debugManager.setEnabled(false);
+        await DiscordUtils.safeSend(message.channel, '🔍 **Debug Mode Disabled**');
+      }
+    );
+
+    // Debug command (special - handles replies and subcommands)
+    registry.register(
+      {
+        name: '.debug',
+        description: 'Debug slash command or replied message',
+        category: 'Debug',
+        args: [
+          { name: 'command', description: 'Slash command to debug', required: false },
+        ],
+        examples: ['.debug', '.debug hunt', '.debug (reply to message)'],
+      },
+      async (message, args, handler) => {
+        await handler.debugManager.handleDebugCommand(message);
+      }
+    );
+
+    // Enchant Commands
+    const enchantTypes = ['enchant', 'refine', 'transmute', 'transcend'];
+    for (const type of enchantTypes) {
+      registry.register(
+        {
+          name: `.on ${type}`,
+          description: `Start auto ${type} until target is achieved`,
+          category: 'Enchant',
+          args: [
+            { name: 'equipment', description: 'sword or armor', required: true },
+            { name: 'target', description: 'Target enchant tier', required: true },
+          ],
+          examples: [`.on ${type} sword epic`, `.on ${type} armor godly`],
+        },
+        async (message, args, handler) => {
+          const equipment = args[0];
+          const target = args.slice(1).join(' ');
+
+          if (!equipment || !target) {
+            return DiscordUtils.safeSend(
+              message.channel,
+              `❌ Usage: \`.on ${type} <sword/armor> <target>\``
+            );
+          }
+
+          const validation = ValidationUtils.validateEnchantInput(type, equipment, target);
+          if (!validation.valid) {
+            return DiscordUtils.safeSend(message.channel, `❌ ${validation.error}`);
+          }
+
+          await handler.autoEnchantManager.start(
+            message.channel,
+            type,
+            equipment,
+            validation.sanitizedTarget || target
+          );
+        }
+      );
+
+      registry.register(
+        {
+          name: `.off ${type}`,
+          description: `Stop auto ${type}`,
+          category: 'Enchant',
+        },
+        async (message, args, handler) => {
+          await handler.autoEnchantManager.stop(message.channel);
+        }
+      );
+    }
+
+    // Enchant status commands
+    for (const type of ['enchant', 'refine', 'transmute', 'transcend']) {
+      registry.register(
+        {
+          name: `.${type} status`,
+          description: `Check ${type} status`,
+          category: 'Enchant',
+        },
+        async (message, args, handler) => {
+          const status = handler.autoEnchantManager.getStatus(message.channel);
+          await DiscordUtils.safeSend(message.channel, status);
+        }
+      );
+    }
+
+    // Help Command
+    registry.register(
+      {
+        name: '.help',
+        description: 'Show this help message',
+        category: 'General',
+        args: [
+          { name: 'command', description: 'Specific command to get help for', required: false },
+        ],
+        examples: ['.help', '.help .on farm'],
+      },
+      async (message, args, handler) => {
+        if (args.length > 0) {
+          const cmdName = args[0].toLowerCase();
+          const help = registry.generateCommandHelp(cmdName);
+          if (help) {
+            await DiscordUtils.safeSend(message.channel, help);
+          } else {
+            await DiscordUtils.safeSend(message.channel, `❌ Unknown command: \`${cmdName}\``);
+          }
+        } else {
+          const help = registry.generateHelp();
+          await DiscordUtils.safeSend(message.channel, help);
+        }
+      }
+    );
+
+    this.logger.info(`Registered ${registry.getAll().length} commands`);
   }
 
   /**
@@ -42,146 +301,76 @@ class CommandHandler {
     // Sanitize input
     const lowerContent = ValidationUtils.sanitizeInput(content.toLowerCase());
 
-    // Parse and execute commands
+    // Parse command and arguments
+    const { commandName, args } = this.parseCommand(lowerContent);
+
+    // Look up command
+    const command = registry.get(commandName);
+    if (!command) return;
+
+    // Check guild requirement
+    if (command.guildOnly && !message.guild) {
+      await DiscordUtils.safeSend(message.channel, '❌ This command must be used in a server');
+      return;
+    }
+
+    // Delete command message
+    await DiscordUtils.safeDelete(message);
+
+    // Execute command
     try {
-      await this.parseCommand(message, lowerContent, content);
+      this.logger.debug(`Executing: ${command.name}`);
+      await command.handler(message, args, this);
     } catch (error) {
-      this.logger.error(`Command error: ${error.message}`);
+      this.logger.error(`Command error (${command.name}): ${error.message}`);
     }
   }
 
   /**
-   * Parse and execute command
+   * Parse command name and arguments from message
+   * @param {string} content - Message content (lowercase)
+   * @returns {Object} { commandName, args }
    */
-  async parseCommand(message, lowerContent, originalContent) {
-    // Debug commands (special case - can be reply or command)
-    if (lowerContent === '.debug' || lowerContent.startsWith('.debug ')) {
-      return await this.debugManager.handleDebugCommand(message);
-    }
+  parseCommand(content) {
+    const parts = content.split(/\s+/);
+    const commandName = parts[0];
 
-    // Farm commands
-    if (lowerContent === '.on farm') {
-      await DiscordUtils.safeDelete(message);
-      return await this.farmManager.start(message.channel);
-    }
-
-    if (lowerContent === '.off farm') {
-      await DiscordUtils.safeDelete(message);
-      this.farmManager.setChannel(message.channel);
-      return this.farmManager.stop();
-    }
-
-    if (lowerContent === '.farm status') {
-      await DiscordUtils.safeDelete(message);
-      const status = this.farmManager.getStatus();
-      return DiscordUtils.safeSend(message.channel, status);
-    }
-
-    // Event commands
-    if (lowerContent === '.on event') {
-      await DiscordUtils.safeDelete(message);
-      this.eventHandler.setChannel(message.channel);
-      this.eventHandler.setEnabled(true);
-      return DiscordUtils.safeSend(message.channel, '🎯 **Auto Event Enabled**');
-    }
-
-    if (lowerContent === '.off event') {
-      await DiscordUtils.safeDelete(message);
-      this.eventHandler.setChannel(message.channel);
-      this.eventHandler.setEnabled(false);
-      return DiscordUtils.safeSend(message.channel, '🛑 **Auto Event Disabled**');
-    }
-
-    // Voice channel commands
-    if (lowerContent === '.on vc' || lowerContent.startsWith('.on vc ')) {
-      await DiscordUtils.safeDelete(message);
-      return await this.handleVoiceJoin(message, lowerContent);
-    }
-
-    if (lowerContent === '.off vc') {
-      await DiscordUtils.safeDelete(message);
-      return await this.handleVoiceLeave(message);
-    }
-
-    if (lowerContent === '.vc status') {
-      await DiscordUtils.safeDelete(message);
-      const guildId = message.guild?.id;
-      const status = this.voiceManager.getStatus(guildId);
-      return DiscordUtils.safeSend(message.channel, status);
-    }
-
-    // Debug mode commands
-    if (lowerContent === '.on debug') {
-      await DiscordUtils.safeDelete(message);
-      this.debugManager.setChannel(message.channel);
-      this.debugManager.setEnabled(true);
-      return DiscordUtils.safeSend(message.channel, '🔍 **Debug Mode Enabled** - Bot messages will be logged');
-    }
-
-    if (lowerContent === '.off debug') {
-      await DiscordUtils.safeDelete(message);
-      this.debugManager.setChannel(message.channel);
-      this.debugManager.setEnabled(false);
-      return DiscordUtils.safeSend(message.channel, '🔍 **Debug Mode Disabled**');
-    }
-
-    // Auto Enchant commands
-    // Pattern: .on enchant/refine/transmute/transcend sword/armor [target]
-    const enchantMatch = lowerContent.match(/^\.on\s+(enchant|refine|transmute|transcend)\s+(sword|armor)\s+(\S+)$/);
+    // Special handling for enchant commands (.on enchant, .on refine, etc.)
+    const enchantMatch = content.match(/^\.on\s+(enchant|refine|transmute|transcend)\s+(.+)$/);
     if (enchantMatch) {
-      await DiscordUtils.safeDelete(message);
-      const [, type, equipment, target] = enchantMatch;
-
-      // Validate enchant input
-      const validation = ValidationUtils.validateEnchantInput(type, equipment, target);
-      if (!validation.valid) {
-        return DiscordUtils.safeSend(message.channel, `❌ ${validation.error}`);
-      }
-
-      return await this.autoEnchantManager.start(
-        message.channel,
-        type,
-        equipment,
-        validation.sanitizedTarget || target
-      );
+      const [, type, rest] = enchantMatch;
+      const restParts = rest.trim().split(/\s+/);
+      return {
+        commandName: `.on ${type}`,
+        args: restParts,
+      };
     }
 
-    // Stop enchant
-    if (lowerContent === '.off enchant' || lowerContent === '.off refine' ||
-        lowerContent === '.off transmute' || lowerContent === '.off transcend') {
-      await DiscordUtils.safeDelete(message);
-      return await this.autoEnchantManager.stop(message.channel);
+    // Special handling for .debug command
+    if (parts[0] === '.debug' && parts.length > 1) {
+      return {
+        commandName: '.debug',
+        args: parts.slice(1),
+      };
     }
 
-    // Enchant status
-    if (lowerContent === '.enchant status' || lowerContent === '.refine status' ||
-        lowerContent === '.transmute status' || lowerContent === '.transcend status') {
-      await DiscordUtils.safeDelete(message);
-      const status = this.autoEnchantManager.getStatus(message.channel);
-      return DiscordUtils.safeSend(message.channel, status);
-    }
-
-    // Help command
-    if (lowerContent === '.help') {
-      await DiscordUtils.safeDelete(message);
-      return this.showHelp(message.channel);
-    }
+    return {
+      commandName,
+      args: parts.slice(1),
+    };
   }
 
   /**
    * Handle voice join command
+   * @param {Object} message - Discord message
+   * @param {string} channelIdArg - Optional channel ID from args
    */
-  async handleVoiceJoin(message, lowerContent) {
-    // Parse optional channel ID from command
-    const parts = lowerContent.split(' ');
+  async handleVoiceJoin(message, channelIdArg) {
     let targetChannel = null;
 
-    if (parts.length > 2) {
-      // Channel ID provided
-      const channelId = parts[2];
-
-      // Validate channel ID format
-      const validation = ValidationUtils.validateChannelId(channelId);
+    if (channelIdArg) {
+      // Channel ID provided as argument
+      const validation = ValidationUtils.validateChannelId(channelIdArg);
       if (!validation.valid) {
         return DiscordUtils.safeSend(message.channel, `❌ ${validation.error}`);
       }
@@ -189,15 +378,14 @@ class CommandHandler {
       targetChannel = this.client.channels.cache.get(validation.sanitized);
 
       if (!targetChannel || !targetChannel.isVoice()) {
-        return DiscordUtils.safeSend(message.channel, `❌ Voice channel not found: \`${channelId}\``);
+        return DiscordUtils.safeSend(message.channel, `❌ Voice channel not found: \`${channelIdArg}\``);
       }
     } else {
-      // No channel ID provided - try to get current voice channel from VoiceManager or guild
+      // No channel ID provided
       const guildId = message.guild?.id;
       const currentConnection = guildId ? this.voiceManager.getConnectionStatus(guildId) : null;
 
       if (currentConnection) {
-        // Already connected to a voice channel
         return DiscordUtils.safeSend(message.channel, [
           '⚠️ **Already connected to a voice channel**',
           '',
@@ -206,7 +394,6 @@ class CommandHandler {
         ].join('\n'));
       }
 
-      // Try to find a voice channel in the guild
       return DiscordUtils.safeSend(message.channel, [
         '❌ **No voice channel specified**',
         '',
@@ -217,17 +404,16 @@ class CommandHandler {
       ].join('\n'));
     }
 
-    // Send processing message first
+    // Send processing message
     const processingMsg = await DiscordUtils.safeSend(message.channel, '🔄 **Joining voice channel...**');
 
     const result = await this.voiceManager.joinChannel(targetChannel, true, true);
 
-    // Delete processing message if it exists
     if (processingMsg) {
       await DiscordUtils.safeDelete(processingMsg);
     }
 
-    // Check connection status directly as fallback
+    // Check connection status
     const guildId = message.guild?.id;
     const connectionStatus = guildId ? this.voiceManager.getConnectionStatus(guildId) : null;
 
@@ -251,6 +437,7 @@ class CommandHandler {
 
   /**
    * Handle voice leave command
+   * @param {Object} message - Discord message
    */
   async handleVoiceLeave(message) {
     const guildId = message.guild?.id;
@@ -268,47 +455,6 @@ class CommandHandler {
     await this.voiceManager.disconnect(guildId);
 
     return DiscordUtils.safeSend(message.channel, '🔇 **Auto Voice Disabled** - Left voice channel');
-  }
-
-  /**
-   * Show help message
-   */
-  async showHelp(channel) {
-    const help = [
-      '📖 **Self Bot Commands**',
-      '',
-      '**🌾 Farm:**',
-      '• `.on farm` - Start auto farm',
-      '• `.off farm` - Stop auto farm',
-      '• `.farm status` - Check farm status',
-      '',
-      '**🎯 Events:**',
-      '• `.on event` - Enable auto event catch',
-      '• `.off event` - Disable auto event catch',
-      '',
-      '**🎤 Voice Channel:**',
-      '• `.on vc <channel_id>` - Join voice channel & stay',
-      '• `.off vc` - Leave voice channel',
-      '• `.vc status` - Check voice status',
-      '',
-      '**🔍 Debug:**',
-      '• `.on debug` - Enable debug logging',
-      '• `.off debug` - Disable debug logging',
-      '• `.debug <command>` - Debug slash command',
-      '• Reply with `.debug` - Debug replied message',
-      '',
-      '**✨ Auto Enchant:**',
-      '• `.on enchant/refine/transmute/transcend sword/armor <target>`',
-      '  Example: `.on enchant sword epic`',
-      '• `.off enchant` - Stop auto enchant',
-      '• `.enchant status` - Check enchant status',
-      '',
-      '**Available Enchant Tiers:**',
-      'normie, good, great, mega, epic, hyper, ultimate,',
-      'perfect, edgy, ultra-edgy, omega, ultra-omega, godly, void, eternal',
-    ].join('\n');
-
-    await DiscordUtils.safeSend(channel, help);
   }
 }
 
