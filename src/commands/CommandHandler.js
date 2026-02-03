@@ -5,6 +5,7 @@
 
 const { Logger } = require('../utils/logger');
 const { DiscordUtils } = require('../utils/discord');
+const { ValidationUtils } = require('../utils/validation');
 const { PREFIX, EPIC_RPG_BOT_ID } = require('../config');
 
 class CommandHandler {
@@ -38,7 +39,8 @@ class CommandHandler {
     // Check for command prefix
     if (!content.startsWith(PREFIX)) return;
 
-    const lowerContent = content.toLowerCase();
+    // Sanitize input
+    const lowerContent = ValidationUtils.sanitizeInput(content.toLowerCase());
 
     // Parse and execute commands
     try {
@@ -129,7 +131,19 @@ class CommandHandler {
     if (enchantMatch) {
       await DiscordUtils.safeDelete(message);
       const [, type, equipment, target] = enchantMatch;
-      return await this.autoEnchantManager.start(message.channel, type, equipment, target);
+
+      // Validate enchant input
+      const validation = ValidationUtils.validateEnchantInput(type, equipment, target);
+      if (!validation.valid) {
+        return DiscordUtils.safeSend(message.channel, `❌ ${validation.error}`);
+      }
+
+      return await this.autoEnchantManager.start(
+        message.channel,
+        type,
+        equipment,
+        validation.sanitizedTarget || target
+      );
     }
 
     // Stop enchant
@@ -165,10 +179,17 @@ class CommandHandler {
     if (parts.length > 2) {
       // Channel ID provided
       const channelId = parts[2];
-      targetChannel = this.client.channels.cache.get(channelId);
+
+      // Validate channel ID format
+      const validation = ValidationUtils.validateChannelId(channelId);
+      if (!validation.valid) {
+        return DiscordUtils.safeSend(message.channel, `❌ ${validation.error}`);
+      }
+
+      targetChannel = this.client.channels.cache.get(validation.sanitized);
 
       if (!targetChannel || !targetChannel.isVoice()) {
-        return DiscordUtils.safeSend(message.channel, `❌ Invalid voice channel ID: \`${channelId}\``);
+        return DiscordUtils.safeSend(message.channel, `❌ Voice channel not found: \`${channelId}\``);
       }
     } else {
       // No channel ID provided - try to get current voice channel from VoiceManager or guild
