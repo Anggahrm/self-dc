@@ -11,7 +11,7 @@ const {
   deleteVoiceSettings,
   getAllEnabledVoiceSettings,
   isConnected: isDbConnected,
-} = require('../utils/database');
+} = require('../config/database');
 
 class VoiceManager extends BaseManager {
   constructor(client) {

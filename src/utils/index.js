@@ -8,7 +8,7 @@ const { DiscordUtils } = require('./discord');
 const { ValidationUtils } = require('./validation');
 const { ErrorHandler } = require('./errorHandler');
 const { Monitoring } = require('./monitoring');
-const database = require('./database');
+const database = require('../config/database');
 
 module.exports = {
   Logger,
