@@ -3,24 +3,23 @@
  * Handles automatic voice channel join and stay functionality
  */
 
-const { Logger } = require('../utils/logger');
+const { BaseManager } = require('./BaseManager');
 const { DiscordUtils } = require('../utils/discord');
-const { 
-  getVoiceSettings, 
-  setVoiceSettings, 
+const {
+  getVoiceSettings,
+  setVoiceSettings,
   deleteVoiceSettings,
   getAllEnabledVoiceSettings,
   isConnected: isDbConnected,
 } = require('../utils/database');
 
-class VoiceManager {
+class VoiceManager extends BaseManager {
   constructor(client) {
-    this.client = client;
-    this.logger = Logger.create('Voice');
-    
+    super(client, 'Voice');
+
     // Active voice connections per guild (in-memory for non-db mode)
     this.connections = new Map();
-    
+
     // Reconnection settings
     this.reconnectDelay = 5000; // 5 seconds
     this.reconnectAttempts = new Map();
@@ -38,7 +37,7 @@ class VoiceManager {
 
     try {
       const savedSettings = await getAllEnabledVoiceSettings();
-      
+
       for (const settings of savedSettings) {
         try {
           const channel = this.client.channels.cache.get(settings.channelId);
@@ -85,7 +84,7 @@ class VoiceManager {
       }
 
       // Wait a bit to ensure clean disconnect
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await DiscordUtils.sleep(500);
 
       // Join the voice channel
       const connection = await this.client.voice.joinChannel(channel, {
@@ -188,17 +187,15 @@ class VoiceManager {
 
     connection.on('disconnect', () => {
       this.logger.warn(`Disconnected from ${channel.name}, attempting reconnect...`);
-      
+
       // Clear keep-alive interval
       if (connection._keepAliveInterval) {
         clearInterval(connection._keepAliveInterval);
         connection._keepAliveInterval = null;
       }
-      
+
       // Handle reconnection asynchronously with proper error handling
-      this.handleReconnect(guildId, channel, selfMute, selfDeaf).catch(error => {
-        this.logger.error(`Reconnection error: ${error.message}`);
-      });
+      this.scheduleReconnect(guildId, channel, selfMute, selfDeaf);
     });
 
     // Handle connection errors
@@ -217,12 +214,11 @@ class VoiceManager {
   }
 
   /**
-   * Handle reconnection logic
+   * Schedule a reconnect attempt using managed timer
    */
-  async handleReconnect(guildId, channel, selfMute, selfDeaf) {
-    // Get current reconnect attempts
+  scheduleReconnect(guildId, channel, selfMute, selfDeaf) {
     const attempts = this.reconnectAttempts.get(guildId) || 0;
-    
+
     if (attempts >= this.maxReconnectAttempts) {
       this.logger.error(`Max reconnect attempts reached for ${channel.name}`);
       this.connections.delete(guildId);
@@ -232,17 +228,32 @@ class VoiceManager {
 
     this.reconnectAttempts.set(guildId, attempts + 1);
 
-    // Wait before reconnecting with exponential backoff
+    // Calculate delay with exponential backoff
     const delay = this.reconnectDelay * Math.pow(1.5, attempts);
     this.logger.info(`Waiting ${Math.round(delay / 1000)}s before reconnect attempt ${attempts + 1}...`);
-    await new Promise(resolve => setTimeout(resolve, delay));
 
+    // Use BaseManager's managed timer
+    this.setManagedTimer(
+      `reconnect_${guildId}`,
+      async () => {
+        await this.handleReconnect(guildId, channel, selfMute, selfDeaf);
+      },
+      delay
+    );
+  }
+
+  /**
+   * Handle reconnection logic
+   */
+  async handleReconnect(guildId, channel, selfMute, selfDeaf) {
     // Check if we should still be connected
     const savedConnection = this.connections.get(guildId);
     if (!savedConnection || savedConnection.channelId !== channel.id) {
       this.logger.debug('Connection was intentionally closed, not reconnecting');
       return;
     }
+
+    const attempts = this.reconnectAttempts.get(guildId) || 0;
 
     // Try to reconnect with fresh channel reference
     try {
@@ -251,8 +262,8 @@ class VoiceManager {
       if (!freshChannel || !freshChannel.isVoice()) {
         this.logger.warn(`Channel ${channel.id} no longer exists or is not a voice channel`);
         // Keep trying - channel might come back
-        if (attempts < this.maxReconnectAttempts - 1) {
-          setTimeout(() => this.handleReconnect(guildId, channel, selfMute, selfDeaf), this.reconnectDelay);
+        if (attempts < this.maxReconnectAttempts) {
+          this.scheduleReconnect(guildId, channel, selfMute, selfDeaf);
         }
         return;
       }
@@ -266,8 +277,8 @@ class VoiceManager {
     } catch (error) {
       this.logger.error(`Reconnect failed: ${error.message}`);
       // Schedule another reconnect attempt
-      if (attempts < this.maxReconnectAttempts - 1) {
-        setTimeout(() => this.handleReconnect(guildId, channel, selfMute, selfDeaf), this.reconnectDelay);
+      if (attempts < this.maxReconnectAttempts) {
+        this.scheduleReconnect(guildId, channel, selfMute, selfDeaf);
       }
     }
   }
@@ -280,12 +291,15 @@ class VoiceManager {
    */
   async disconnect(guildId, removeFromDb = true) {
     const connectionInfo = this.connections.get(guildId);
-    
+
     if (!connectionInfo) {
       return false;
     }
 
     try {
+      // Clear any pending reconnect timer
+      this.clearManagedTimer(`reconnect_${guildId}`);
+
       // Clear keep-alive interval if exists
       if (connectionInfo.connection && connectionInfo.connection._keepAliveInterval) {
         clearInterval(connectionInfo.connection._keepAliveInterval);
@@ -339,7 +353,7 @@ class VoiceManager {
   getStatus(guildId = null) {
     if (guildId) {
       const connectionInfo = this.connections.get(guildId);
-      
+
       if (!connectionInfo) {
         return '🔇 **Voice Status:** Not connected';
       }
@@ -390,7 +404,12 @@ class VoiceManager {
    */
   async cleanup() {
     this.logger.info('Cleaning up voice connections...');
-    
+
+    // Clear all reconnect timers first
+    for (const guildId of this.connections.keys()) {
+      this.clearManagedTimer(`reconnect_${guildId}`);
+    }
+
     for (const [guildId, connectionInfo] of this.connections) {
       // Clear keep-alive interval
       if (connectionInfo.connection && connectionInfo.connection._keepAliveInterval) {
@@ -399,9 +418,12 @@ class VoiceManager {
       }
       await this.disconnect(guildId, false);
     }
-    
+
     this.connections.clear();
     this.reconnectAttempts.clear();
+
+    // Call parent cleanup
+    super.cleanup();
   }
 }
 

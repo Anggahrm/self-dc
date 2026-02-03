@@ -7,6 +7,7 @@
 const { Logger } = require('../utils/logger');
 const { DiscordUtils } = require('../utils/discord');
 const { EPIC_RPG_BOT_ID, ENCHANT } = require('../config');
+const { BaseManager } = require('./BaseManager');
 
 // Pre-process tier names for efficient lookup
 const TIER_LOOKUP = new Map();
@@ -20,10 +21,9 @@ ENCHANT.TIERS.forEach((tier, index) => {
 // Regex pattern for parsing enchant result from bot response
 const ENCHANT_RESULT_PATTERN = /~-~>\s*\*{0,2}(\w+(?:-\w+)?)\*{0,2}\s*<~-~/i;
 
-class AutoEnchantManager {
+class AutoEnchantManager extends BaseManager {
   constructor(client) {
-    this.client = client;
-    this.logger = Logger.create('Enchant');
+    super(client, 'Enchant');
     
     // Active enchant sessions per channel
     this.sessions = new Map();
@@ -422,6 +422,9 @@ class AutoEnchantManager {
       session.running = false;
     }
     this.sessions.clear();
+    
+    // Call parent cleanup
+    super.cleanup();
   }
 }
 

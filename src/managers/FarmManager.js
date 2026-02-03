@@ -3,18 +3,14 @@
  * Handles automatic farming commands (adventure, axe, hunt, heal)
  */
 
+const { BaseManager } = require('./BaseManager');
 const { DiscordUtils } = require('../utils/discord');
 const { EPIC_RPG_BOT_ID, FARM } = require('../config');
 
-class FarmManager {
+class FarmManager extends BaseManager {
   constructor(client) {
-    this.client = client;
-    this.logger = require('../utils/logger').Logger.create('Farm');
-    this.enabled = false;
+    super(client, 'Farm');
     this.channel = null;
-
-    // Timers for each command - now using Map for consistency
-    this.timers = new Map();
 
     // State tracking for each command
     this.states = {
@@ -365,6 +361,9 @@ class FarmManager {
       this.logger.debug(`Cleaned up timer: ${name}`);
     }
     this.timers.clear();
+    
+    // Call parent cleanup
+    super.cleanup();
   }
 
   /**

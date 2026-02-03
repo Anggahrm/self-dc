@@ -3,46 +3,20 @@
  * Handles debug commands and bot message inspection
  */
 
-const { Logger } = require('../utils/logger');
+const { BaseManager } = require('./BaseManager');
 const { DiscordUtils } = require('../utils/discord');
 const { EPIC_RPG_BOT_ID, TIMEOUTS } = require('../config');
 
-class DebugManager {
+class DebugManager extends BaseManager {
   constructor(client) {
-    this.client = client;
-    this.logger = Logger.create('Debug');
-    this.enabled = false;
-    this.channel = null;
-    this.pendingMessages = new Map();
-  }
-
-  /**
-   * Enable/disable debug mode
-   */
-  setEnabled(enabled) {
-    this.enabled = enabled;
-    this.logger.info(`Debug Mode ${enabled ? 'Enabled' : 'Disabled'}`);
-  }
-
-  /**
-   * Check if debug mode is enabled
-   */
-  isEnabled() {
-    return this.enabled;
-  }
-
-  /**
-   * Set current channel
-   */
-  setChannel(channel) {
-    this.channel = channel;
+    super(client, 'Debug');
   }
 
   /**
    * Handle debug command from user
    */
   async handleDebugCommand(message) {
-    await message.delete().catch(() => {});
+    await DiscordUtils.safeDelete(message);
 
     const content = message.content.toLowerCase().trim();
 
@@ -72,16 +46,16 @@ class DebugManager {
       const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
 
       if (repliedMessage.author.id !== EPIC_RPG_BOT_ID) {
-        await message.channel.send(`❌ Can only debug messages from EPIC RPG bot`).catch(() => {});
+        await DiscordUtils.safeSend(message.channel, '❌ Can only debug messages from EPIC RPG bot');
         return true;
       }
 
-      await message.channel.send('🔍 **Debugging replied message...**').catch(() => {});
+      await DiscordUtils.safeSend(message.channel, '🔍 **Debugging replied message...**');
       await this.formatBotMessage(message.channel, repliedMessage);
       return true;
 
     } catch (error) {
-      await message.channel.send(`❌ Error: ${error.message}`).catch(() => {});
+      await DiscordUtils.safeSend(message.channel, `❌ Error: ${error.message}`);
       return true;
     }
   }
@@ -91,7 +65,7 @@ class DebugManager {
    */
   async debugSlashCommand(message, command) {
     try {
-      await message.channel.send(`🔍 **Executing debug command:** \`${command}\``).catch(() => {});
+      await DiscordUtils.safeSend(message.channel, `🔍 **Executing debug command:** \`${command}\``);
 
       const response = await DiscordUtils.sendSlashAndWait(
         message.channel,
@@ -102,17 +76,17 @@ class DebugManager {
       );
 
       if (response) {
-        await message.channel.send('✅ **Bot responded! Debugging...**').catch(() => {});
+        await DiscordUtils.safeSend(message.channel, '✅ **Bot responded! Debugging...**');
         await this.formatBotMessage(message.channel, response);
       } else {
-        await message.channel.send('❌ No response from bot').catch(() => {});
+        await DiscordUtils.safeSend(message.channel, '❌ No response from bot');
       }
 
     } catch (error) {
       if (error.message.includes('Timeout')) {
-        await message.channel.send('⏱️ Bot response timeout (15s)').catch(() => {});
+        await DiscordUtils.safeSend(message.channel, '⏱️ Bot response timeout (15s)');
       } else {
-        await message.channel.send(`❌ Error: ${error.message}`).catch(() => {});
+        await DiscordUtils.safeSend(message.channel, `❌ Error: ${error.message}`);
       }
     }
     return true;
@@ -127,7 +101,7 @@ class DebugManager {
       '• `.debug <command>` - Debug a slash command response',
       '• Reply to a bot message with `.debug` - Debug that message',
     ].join('\n');
-    await channel.send(usage).catch(() => {});
+    await DiscordUtils.safeSend(channel, usage);
   }
 
   /**
@@ -138,28 +112,37 @@ class DebugManager {
 
     // Handle "thinking" messages
     if (message.flags?.has('LOADING')) {
-      await message.channel.send('🔄 **[DEBUG]** Bot is thinking...').catch(() => {});
+      await DiscordUtils.safeSend(message.channel, '🔄 **[DEBUG]** Bot is thinking...');
 
-      this.pendingMessages.set(message.id, message);
-
-      const onUpdate = async (oldMsg, newMsg) => {
-        if (oldMsg.id === message.id) {
-          message.client.off('messageUpdate', onUpdate);
-          this.pendingMessages.delete(message.id);
-          await message.channel.send('✅ **[DEBUG]** Bot finished thinking:').catch(() => {});
+      // Use BaseManager's registerPendingMessage for proper cleanup
+      const resolver = this.registerPendingMessage(
+        message.id,
+        message,
+        async (newMsg) => {
+          await DiscordUtils.safeSend(message.channel, '✅ **[DEBUG]** Bot finished thinking:');
           await this.formatBotMessage(message.channel, newMsg);
+        },
+        TIMEOUTS.THINKING_CLEANUP
+      );
+
+      // Set up the event listener
+      const onUpdate = (oldMsg, newMsg) => {
+        if (oldMsg.id === message.id) {
+          resolver(newMsg);
         }
       };
 
       message.client.on('messageUpdate', onUpdate);
 
-      // Cleanup timeout
-      setTimeout(() => {
-        if (this.pendingMessages.has(message.id)) {
+      // Clean up listener when resolved
+      const entry = this.pendingMessages.get(message.id);
+      if (entry) {
+        const originalCleanup = entry.cleanup;
+        entry.cleanup = () => {
           message.client.off('messageUpdate', onUpdate);
-          this.pendingMessages.delete(message.id);
-        }
-      }, TIMEOUTS.THINKING_CLEANUP);
+          originalCleanup?.();
+        };
+      }
 
       return;
     }
@@ -174,7 +157,7 @@ class DebugManager {
     try {
       // Content
       if (message.content?.trim()) {
-        await channel.send(`**[DEBUG]** Content:\n\`\`\`\n${message.content}\n\`\`\``).catch(() => {});
+        await DiscordUtils.safeSend(channel, `**[DEBUG]** Content:\n\`\`\`\n${message.content}\n\`\`\``);
       }
 
       // Embeds
@@ -195,11 +178,11 @@ class DebugManager {
 
       // Metadata
       const metadata = this.formatMetadata(message);
-      await channel.send(metadata).catch(() => {});
+      await DiscordUtils.safeSend(channel, metadata);
 
       // Empty message warning
       if (!message.content?.trim() && !message.embeds?.length && !message.components?.length) {
-        await channel.send('⚠️ **[DEBUG]** Message has no content/embeds/components').catch(() => {});
+        await DiscordUtils.safeSend(channel, '⚠️ **[DEBUG]** Message has no content/embeds/components');
       }
 
     } catch (error) {
@@ -284,13 +267,13 @@ class DebugManager {
    */
   async sendChunked(channel, text) {
     if (text.length <= 1900) {
-      await channel.send(text).catch(() => {});
+      await DiscordUtils.safeSend(channel, text);
       return;
     }
 
     const chunks = text.match(/.{1,1900}(\n|$)/g) || [];
     for (const chunk of chunks) {
-      await channel.send(chunk).catch(() => {});
+      await DiscordUtils.safeSend(channel, chunk);
     }
   }
 }
