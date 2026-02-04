@@ -349,31 +349,44 @@ class CommandHandler {
    */
   parseCommand(content) {
     const parts = content.split(/\s+/);
-    const commandName = parts[0];
 
-    // Special handling for enchant commands (.on enchant, .on refine, etc.)
-    const enchantMatch = content.match(/^\.on\s+(enchant|refine|transmute|transcend)\s+(.+)$/);
-    if (enchantMatch) {
-      const [, type, rest] = enchantMatch;
-      const restParts = rest.trim().split(/\s+/);
-      return {
-        commandName: `.on ${type}`,
-        args: restParts,
-      };
+    // Find the longest matching registered command
+    // Try matching up to 3 words (e.g., ".on enchant sword")
+    let commandName = parts[0];
+    let args = parts.slice(1);
+
+    // Check for 3-word commands first (e.g., ".on enchant sword")
+    if (parts.length >= 3) {
+      const threeWord = `${parts[0]} ${parts[1]} ${parts[2]}`;
+      if (registry.get(threeWord)) {
+        return { commandName: threeWord, args: parts.slice(3) };
+      }
     }
 
-    // Special handling for .debug command
-    if (parts[0] === '.debug' && parts.length > 1) {
-      return {
-        commandName: '.debug',
-        args: parts.slice(1),
-      };
+    // Check for 2-word commands (e.g., ".on farm", ".farm status")
+    if (parts.length >= 2) {
+      const twoWord = `${parts[0]} ${parts[1]}`;
+      if (registry.get(twoWord)) {
+        return { commandName: twoWord, args: parts.slice(2) };
+      }
     }
 
-    return {
-      commandName,
-      args: parts.slice(1),
-    };
+    // Fall back to 1-word command
+    const cmd = registry.get(parts[0]);
+    if (cmd) {
+      return { commandName: parts[0], args: parts.slice(1) };
+    }
+
+    // Check aliases
+    for (let i = Math.min(parts.length, 3); i >= 1; i--) {
+      const candidate = parts.slice(0, i).join(' ');
+      const aliasCmd = registry.findByAlias(candidate);
+      if (aliasCmd) {
+        return { commandName: aliasCmd.definition.name, args: parts.slice(i) };
+      }
+    }
+
+    return { commandName: parts[0], args: parts.slice(1) };
   }
 
   /**
