@@ -14,12 +14,35 @@
 
 require('dotenv').config();
 const Discord = require('discord.js-selfbot-v13');
+const express = require('express');
 const { Logger, database, ErrorHandler, Monitoring } = require('./utils');
 const { FarmManager, EventHandler, DebugManager, AutoEnchantManager, VoiceManager } = require('./managers');
 const { CommandHandler } = require('./commands');
 
 // Initialize logger
 const logger = Logger.create('System');
+
+// Start keep-alive web server for Heroku
+const PORT = process.env.PORT || 3000;
+const app = express();
+
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    bot: client.user ? client.user.username : 'starting'
+  });
+});
+
+app.get('/health', (req, res) => {
+  const health = client.monitoring ? client.monitoring.getHealthStatus() : { status: 'starting' };
+  res.json(health);
+});
+
+app.listen(PORT, () => {
+  logger.info(`Keep-alive server listening on port ${PORT}`);
+});
 
 // Create Discord client
 const client = new Discord.Client({
