@@ -365,13 +365,17 @@ class VoiceManager extends BaseManager {
       // Reset failures on success
       this.heartbeatFailures.set(guildId, 0);
 
-      // Send keep-alive via setSpeaking
+      // Send keep-alive via setSpeaking (use simple boolean format for discord.js-selfbot-v13)
       try {
-        connection.setSpeaking({
-          speaking: { value: 0 },
-          delay: 0,
-          ssrc: 0,
-        });
+        // Toggle speaking briefly to keep connection alive
+        connection.setSpeaking(true);
+        setTimeout(() => {
+          try {
+            connection.setSpeaking(false);
+          } catch (e) {
+            // Ignore
+          }
+        }, 100);
       } catch (error) {
         this.logger.debug(`Keep-alive setSpeaking failed: ${error.message}`);
       }
