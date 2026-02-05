@@ -2,8 +2,8 @@
 Command system for the Discord self-bot.
 """
 
-from self_dc_python.commands.command_registry import CommandRegistry, registry, Command, CommandDefinition
-from self_dc_python.commands.command_handler import CommandHandler
+from .command_registry import CommandRegistry, registry, Command, CommandDefinition
+from .command_handler import CommandHandler
 
 __all__ = [
     "CommandRegistry",
