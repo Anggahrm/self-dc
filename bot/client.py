@@ -23,11 +23,11 @@ class SelfBot(commands.Bot):
 
     def __init__(self):
         # discord.py-self uses self-bot features
+        # Note: Self-bots don't use intents (user accounts, not bot accounts)
         super().__init__(
             command_prefix=".",
             self_bot=True,
             help_command=None,  # We'll implement custom help
-            intents=discord.Intents.all(),
         )
 
         # Track uptime
