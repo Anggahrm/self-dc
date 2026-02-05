@@ -585,11 +585,14 @@ class VoiceManager extends BaseManager {
 
       this.logger.success(`[${corrId}] Successfully joined voice channel: ${channel.name}`);
 
-      // Start heartbeat
-      this.startHeartbeat(guildId, connection);
-
-      // Set up disconnect handler
-      this.setupConnectionHandlers(connection, guildId);
+      // Start heartbeat (only if we have connection object)
+      if (connection) {
+        this.startHeartbeat(guildId, connection);
+        // Set up disconnect handler
+        this.setupConnectionHandlers(connection, guildId);
+      } else {
+        this.logger.warn(`[${corrId}] No connection object, skipping heartbeat and disconnect handlers`);
+      }
 
       return connectionInfo;
     } catch (error) {
