@@ -262,6 +262,10 @@ class VoiceManager extends BaseManager {
             const corrId = this.resetCorrelationId(settings.guildId);
             this.logger.info(`[${corrId}] Restoring voice connection to ${channel.name}`);
             await this.joinChannel(channel, settings.selfMute, settings.selfDeaf, false);
+          } else {
+            // Channel no longer exists, cleanup DB
+            this.logger.warn(`Voice channel ${settings.channelId} no longer exists, removing from database`);
+            await deleteVoiceSettings(settings.guildId);
           }
         } catch (error) {
           this.logger.warn(`Failed to restore voice connection: ${error.message}`);
@@ -661,11 +665,10 @@ class VoiceManager extends BaseManager {
       const freshChannel = this.client.channels.cache.get(channel.id);
       if (!freshChannel || !freshChannel.isVoice()) {
         this.logger.warn(`[${corrId}] Channel ${channel.id} no longer exists or is not a voice channel`);
-
-        const attempts = this.reconnectAttempts.get(guildId) || 0;
-        if (attempts < this.maxReconnectAttempts) {
-          this.scheduleReconnect(guildId, channel, selfMute, selfDeaf);
-        }
+        this.logger.info(`[${corrId}] Stopping reconnect - voice channel was deleted`);
+        
+        // Cleanup and remove from DB since channel is gone
+        await this.disconnect(guildId, true);
         return;
       }
 
