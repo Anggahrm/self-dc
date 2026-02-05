@@ -82,16 +82,11 @@ def setup_logging(name: str, level: Optional[int] = None) -> logging.Logger:
     return logger
 
 
-class LoggerMixin:
-    """Mixin class that provides logger functionality."""
+class CustomLogger:
+    """Custom logger wrapper with success method."""
 
     def __init__(self, name: str):
         self._logger = setup_logging(name)
-
-    @property
-    def logger(self) -> logging.Logger:
-        """Get the logger instance."""
-        return self._logger
 
     def debug(self, message: str, **kwargs) -> None:
         """Log debug message."""
@@ -111,11 +106,14 @@ class LoggerMixin:
 
     def success(self, message: str, **kwargs) -> None:
         """Log success message (custom level)."""
-        # Use info level but prefix with [SUCCESS]
         self._logger.info(f"[SUCCESS] {message}", extra=kwargs)
+
+    def exception(self, message: str, **kwargs) -> None:
+        """Log exception with traceback."""
+        self._logger.exception(message, extra=kwargs)
 
 
 # Convenience function
-def get_logger(name: str) -> logging.Logger:
-    """Get a logger instance."""
-    return setup_logging(name)
+def get_logger(name: str) -> CustomLogger:
+    """Get a logger instance with success method."""
+    return CustomLogger(name)
