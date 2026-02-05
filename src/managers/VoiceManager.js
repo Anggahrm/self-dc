@@ -330,25 +330,36 @@ class VoiceManager extends BaseManager {
         return;
       }
 
-      // Check if connection is still open
+      // Check if connection is still valid using voice state (more reliable than readyState)
       const connection = connectionInfo?.connection;
       if (!connection) {
         this.stopHeartbeat(guildId);
         return;
       }
-      if (connection.readyState !== 'open') {
-        const failures = (this.heartbeatFailures.get(guildId) || 0) + 1;
-        this.heartbeatFailures.set(guildId, failures);
 
-        const corrId = this.getCorrelationId(guildId);
-        if (failures >= this.maxHeartbeatFailures) {
-          this.logger.warn(`[${corrId}] Heartbeat failed ${failures}x, triggering reconnect`);
-          this.stopHeartbeat(guildId);
-          this.handleDisconnect(guildId, connectionInfo, 'heartbeat_failure');
-        } else {
-          this.logger.debug(`[${corrId}] Heartbeat warning (${failures}/${this.maxHeartbeatFailures})`);
+      // For discord.js-selfbot-v13, use voice state check instead of readyState
+      try {
+        const guild = this.client.guilds.cache.get(guildId);
+        const member = await guild?.members.fetch(this.client.user.id);
+        const actualChannelId = member?.voice?.channelId;
+        const expectedChannelId = connectionInfo.channelId;
+
+        if (actualChannelId !== expectedChannelId) {
+          const failures = (this.heartbeatFailures.get(guildId) || 0) + 1;
+          this.heartbeatFailures.set(guildId, failures);
+
+          const corrId = this.getCorrelationId(guildId);
+          if (failures >= this.maxHeartbeatFailures) {
+            this.logger.warn(`[${corrId}] Heartbeat failed ${failures}x (not in voice), triggering reconnect`);
+            this.stopHeartbeat(guildId);
+            this.handleDisconnect(guildId, connectionInfo, 'heartbeat_failure');
+          } else {
+            this.logger.debug(`[${corrId}] Heartbeat warning (${failures}/${this.maxHeartbeatFailures})`);
+          }
+          return;
         }
-        return;
+      } catch (error) {
+        this.logger.debug(`Heartbeat voice check failed: ${error.message}`);
       }
 
       // Reset failures on success
