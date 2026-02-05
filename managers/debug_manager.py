@@ -135,7 +135,8 @@ class DebugManager(BaseManager):
                 EPIC_RPG_BOT_ID,
                 command,
                 {},
-                TIMEOUTS["DEBUG_COMMAND"]
+                TIMEOUTS["DEBUG_COMMAND"],
+                client=self.client,
             )
 
             if response:

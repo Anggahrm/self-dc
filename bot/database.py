@@ -47,6 +47,7 @@ async def _init_tables() -> None:
                 user_id VARCHAR(255) PRIMARY KEY,
                 auto_farm_enabled BOOLEAN DEFAULT FALSE,
                 auto_farm_channel_id VARCHAR(255),
+                auto_farm_guild_id VARCHAR(255),
                 auto_farm_type VARCHAR(50) DEFAULT 'adventure',
                 auto_farm_cooldown INTEGER DEFAULT 17,
                 auto_enchant_enabled BOOLEAN DEFAULT FALSE,
@@ -59,6 +60,19 @@ async def _init_tables() -> None:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+        """)
+
+        # Add auto_farm_guild_id column if it doesn't exist (migration)
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'user_settings' AND column_name = 'auto_farm_guild_id'
+                ) THEN
+                    ALTER TABLE user_settings ADD COLUMN auto_farm_guild_id VARCHAR(255);
+                END IF;
+            END $$;
         """)
 
         await conn.execute("""

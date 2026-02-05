@@ -119,6 +119,7 @@ class DiscordUtils:
         command: str,
         options: Optional[Dict[str, Any]] = None,
         timeout_ms: int = 15 * 60 * 1000,
+        client: Any = None,
     ) -> Any:
         """
         Send slash command and wait for bot response.
@@ -129,6 +130,7 @@ class DiscordUtils:
             command: Slash command name
             options: Command options as keyword arguments
             timeout_ms: Timeout in milliseconds
+            client: Discord client (Bot instance) for event listening
 
         Returns:
             Bot response message
@@ -158,13 +160,16 @@ class DiscordUtils:
         if not slash_cmd:
             raise Exception(f"Slash command '{command}' not found for bot {bot_id}")
 
-        # Set up listener for bot response before invoking
-        client = channel.guild._state._get_client() if hasattr(channel, 'guild') else None
+        # Use provided client, or try to get from channel's guild
         if not client:
-            # Fallback: try to get client from channel
-            client = getattr(channel, '_state', None)
-            if client:
-                client = client._get_client()
+            if hasattr(channel, 'guild') and channel.guild:
+                client = getattr(channel.guild, '_state', None)
+                if hasattr(client, '_get_client'):
+                    client = client._get_client()
+            if not client:
+                client = getattr(channel, '_state', None)
+                if hasattr(client, '_get_client'):
+                    client = client._get_client()
 
         future: asyncio.Future[Any] = asyncio.get_event_loop().create_future()
 
@@ -218,10 +223,10 @@ class DiscordUtils:
         """
         future: asyncio.Future[Any] = asyncio.get_event_loop().create_future()
 
-        # Get client from message
+        # Get client from message - in discord.py-self, _state is the client
         client = getattr(original_message, '_state', None)
-        if client:
-            client = client._get_client()
+        if not client and hasattr(original_message, 'channel'):
+            client = getattr(original_message.channel, '_state', None)
 
         if not client:
             raise Exception("Could not get client from message")
@@ -387,10 +392,10 @@ class DiscordUtils:
         """
         future: asyncio.Future[Any] = asyncio.get_event_loop().create_future()
 
-        # Get client from message
+        # Get client from message - in discord.py-self, _state is the client
         client = getattr(message, '_state', None)
-        if client:
-            client = client._get_client()
+        if not client and hasattr(message, 'channel'):
+            client = getattr(message.channel, '_state', None)
 
         if not client:
             raise Exception("Could not get client from message")

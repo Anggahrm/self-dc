@@ -55,13 +55,18 @@ class SelfBot(commands.Bot):
         from managers.event_handler import EventHandler
         from managers.debug_manager import DebugManager
         from repositories.voice_repository import VoiceRepository
+        from repositories.farm_repository import FarmRepository
         from bot.database import get_pool
         from commands.command_handler import CommandHandler
 
-        self.farm_manager = FarmManager(self)
+        # Get database pool for repositories
+        pool = await get_pool()
+
+        # FarmManager with FarmRepository
+        farm_repo = FarmRepository(pool) if pool else None
+        self.farm_manager = FarmManager(self, farm_repo)
 
         # VoiceManager needs VoiceRepository
-        pool = await get_pool()
         voice_repo = VoiceRepository(pool) if pool else None
         self.voice_manager = VoiceManager(self, voice_repo)
 
@@ -94,6 +99,10 @@ class SelfBot(commands.Bot):
         # Initialize voice connections from database
         if self.voice_manager:
             await self.voice_manager.initialize()
+
+        # Initialize farm from database (auto-restore)
+        if self.farm_manager:
+            await self.farm_manager.initialize()
 
     async def on_message(self, message: discord.Message):
         """Handle incoming messages."""

@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 
 from managers.base_manager import BaseManager
 from utils.discord import DiscordUtils
+from repositories.farm_repository import FarmRepository
 
 
 # Epic RPG Bot ID
@@ -31,9 +32,10 @@ FARM_CONFIG = {
 class FarmManager(BaseManager):
     """Manager for auto farming commands."""
 
-    def __init__(self, client: Any):
+    def __init__(self, client: Any, farm_repository: Optional[FarmRepository] = None):
         super().__init__(client, "Farm")
         self.channel: Optional[Any] = None
+        self.farm_repository = farm_repository
 
         # State tracking for each command
         self.states: Dict[str, Dict[str, Any]] = {
@@ -42,6 +44,42 @@ class FarmManager(BaseManager):
             "hunt": {"enabled": False, "executing": False, "on_cooldown": False},
             "heal": {"executing": False},
         }
+
+    async def initialize(self) -> None:
+        """Initialize farm manager and restore saved state."""
+        if not self.farm_repository:
+            return
+
+        try:
+            # Get user ID from client
+            if not self.client.user:
+                return
+
+            user_id = str(self.client.user.id)
+            settings = await self.farm_repository.get_farm_settings(user_id)
+
+            if settings and settings.get("enabled") and settings.get("channel_id"):
+                channel_id = settings["channel_id"]
+                guild_id = settings.get("guild_id")
+
+                # Find the channel
+                channel = None
+                if guild_id:
+                    guild = self.client.get_guild(int(guild_id))
+                    if guild:
+                        channel = guild.get_channel(int(channel_id))
+
+                if not channel:
+                    # Try to find channel in any guild
+                    channel = self.client.get_channel(int(channel_id))
+
+                if channel:
+                    self.logger.info(f"Restoring farm in channel: {channel.name}")
+                    await self.start_farm(channel, save_to_db=False)
+                else:
+                    self.logger.warning(f"Could not find farm channel {channel_id}")
+        except Exception as e:
+            self.logger.error(f"Failed to restore farm state: {e}")
 
     async def check_and_heal(self, bot_response: Any) -> None:
         """
@@ -83,7 +121,8 @@ class FarmManager(BaseManager):
                 EPIC_RPG_BOT_ID,
                 "heal",
                 {},
-                FARM_CONFIG["RESPONSE_TIMEOUT"]
+                FARM_CONFIG["RESPONSE_TIMEOUT"],
+                client=self.client,
             )
 
             if response:
@@ -130,7 +169,8 @@ class FarmManager(BaseManager):
                 EPIC_RPG_BOT_ID,
                 command,
                 {},
-                FARM_CONFIG["RESPONSE_TIMEOUT"]
+                FARM_CONFIG["RESPONSE_TIMEOUT"],
+                client=self.client,
             )
 
             if response:
@@ -290,12 +330,13 @@ class FarmManager(BaseManager):
 
         self.logger.info(f"{command} timer stopped")
 
-    async def start_farm(self, channel: Any) -> None:
+    async def start_farm(self, channel: Any, save_to_db: bool = True) -> None:
         """
         Start auto farm.
 
         Args:
             channel: Discord channel
+            save_to_db: Whether to save state to database
         """
         if self.enabled:
             self.logger.warning("Farm already running")
@@ -304,6 +345,19 @@ class FarmManager(BaseManager):
         self.enabled = True
         self.channel = channel
         self.logger.success("Auto Farm Started")
+
+        # Save to database for auto-restore on restart
+        if save_to_db and self.farm_repository and self.client.user:
+            try:
+                await self.farm_repository.save_farm_settings(
+                    user_id=str(self.client.user.id),
+                    channel_id=str(channel.id),
+                    guild_id=str(channel.guild.id) if hasattr(channel, 'guild') and channel.guild else "",
+                    enabled=True,
+                )
+                self.logger.debug("Farm state saved to database")
+            except Exception as e:
+                self.logger.error(f"Failed to save farm state: {e}")
 
         await DiscordUtils.safe_send(channel, "🌾 **Auto Farm Started**\nRunning: adventure, axe, hunt with auto-heal")
 
@@ -320,7 +374,7 @@ class FarmManager(BaseManager):
 
         asyncio.create_task(start_timers())
 
-    def stop_farm(self) -> None:
+    async def stop_farm(self) -> None:
         """Stop auto farm."""
         if not self.enabled:
             self.logger.warning("Farm not running")
@@ -332,10 +386,18 @@ class FarmManager(BaseManager):
         self._stop_command_timer("hunt")
         self.states["heal"]["executing"] = False
 
+        # Disable in database
+        if self.farm_repository and self.client.user:
+            try:
+                await self.farm_repository.disable_farm(str(self.client.user.id))
+                self.logger.debug("Farm disabled in database")
+            except Exception as e:
+                self.logger.error(f"Failed to disable farm in database: {e}")
+
         self.logger.success("Auto Farm Stopped")
 
         if self.channel:
-            asyncio.create_task(DiscordUtils.safe_send(self.channel, "🛑 **Auto Farm Stopped**"))
+            await DiscordUtils.safe_send(self.channel, "🛑 **Auto Farm Stopped**")
 
     def get_status(self) -> str:
         """

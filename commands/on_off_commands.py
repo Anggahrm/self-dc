@@ -111,7 +111,7 @@ async def off_command(message: Any, args: List[str]) -> None:
     if feature == "farm":
         if client.farm_manager:
             client.farm_manager.set_channel(message.channel)
-            client.farm_manager.stop_farm()
+            await client.farm_manager.stop_farm()
         else:
             await message.reply("❌ Farm manager not initialized")
 

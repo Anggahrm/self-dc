@@ -194,7 +194,8 @@ class AutoEnchantManager(BaseManager):
                         EPIC_RPG_BOT_ID,
                         session["type"],
                         {"item": session["equipment"]},
-                        ENCHANT_CONFIG["RESPONSE_TIMEOUT"]
+                        ENCHANT_CONFIG["RESPONSE_TIMEOUT"],
+                        client=self.client,
                     )
                 else:
                     # Click "ENCHANT AGAIN" button

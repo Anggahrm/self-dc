@@ -40,7 +40,7 @@ async def farm_off_command(message: Any, args: List[str]) -> None:
         return
 
     farm_manager.set_channel(message.channel)
-    farm_manager.stop_farm()
+    await farm_manager.stop_farm()
 
 
 async def farmstatus_command(message: Any, args: List[str]) -> None:

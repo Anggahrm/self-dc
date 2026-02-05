@@ -240,7 +240,7 @@ class CommandHandler:
         """Handle .off farm command."""
         if handler.farm_manager:
             handler.farm_manager.set_channel(message.channel)
-            handler.farm_manager.stop_farm()
+            await handler.farm_manager.stop_farm()
 
     async def _cmd_farm_status(self, message: Any, args: List[str], handler: "CommandHandler") -> None:
         """Handle .farm status command."""
