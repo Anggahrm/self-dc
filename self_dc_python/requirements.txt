@@ -1,0 +1,29 @@
+# Discord
+# Using discord.py-self from GitHub (self-bot fork)
+git+https://github.com/dolfies/discord.py-self.git@master
+
+# Web framework (for Heroku keep-alive)
+fastapi>=0.109.0
+uvicorn>=0.27.0
+
+# Database
+asyncpg>=0.29.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Logging and utilities
+rich>=13.7.0
+python-json-logger>=2.0.7
+
+# HTTP client (for external APIs)
+aiohttp>=3.9.0
+
+# Date/Time handling
+python-dateutil>=2.8.2
+
+# System monitoring
+psutil>=5.9.0
+
+# Task scheduling
+APScheduler>=3.10.4
