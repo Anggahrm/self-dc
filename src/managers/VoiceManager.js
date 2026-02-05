@@ -507,11 +507,45 @@ class VoiceManager extends BaseManager {
       this.logger.info(`[${corrId}] Joining voice channel: ${channel.name}`);
 
       // Join the voice channel
-      const connection = await this.client.voice.joinChannel(channel, {
-        selfMute,
-        selfDeaf,
-        selfVideo: false,
-      });
+      let connection;
+      try {
+        connection = await this.client.voice.joinChannel(channel, {
+          selfMute,
+          selfDeaf,
+          selfVideo: false,
+        });
+      } catch (error) {
+        // Library may throw "Connection not established" even if voice state is valid
+        // Check if we're actually connected via voice state
+        if (error.message?.includes('Connection not established')) {
+          this.logger.warn(`[${corrId}] Library timeout, checking voice state...`);
+          await DiscordUtils.sleep(2000);
+          const isInChannel = await this.validateConnection(guildId, channel.id);
+          if (isInChannel) {
+            this.logger.info(`[${corrId}] Voice state confirmed, connection successful`);
+            // Create connection info from voice state
+            const connectionInfo = {
+              connection: null, // We don't have the connection object, but we're in voice
+              channelId: channel.id,
+              channelName: channel.name,
+              guildId,
+              guildName: channel.guild.name,
+              selfMute,
+              selfDeaf,
+              joinedAt: Date.now(),
+            };
+            this.connections.set(guildId, connectionInfo);
+            this.connectionStableSince.set(guildId, Date.now());
+            this.setConnectionState(guildId, ConnectionState.CONNECTED);
+            if (saveToDb && isDbConnected()) {
+              await setVoiceSettings(guildId, channel.id, true, selfMute, selfDeaf);
+            }
+            this.logger.success(`[${corrId}] Successfully joined voice channel: ${channel.name}`);
+            return connectionInfo;
+          }
+        }
+        throw error;
+      }
 
       // For discord.js-selfbot-v13, ready event is unreliable
       // Use voice state validation instead of waiting for ready event
