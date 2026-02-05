@@ -193,7 +193,7 @@ class AutoEnchantManager(BaseManager):
                         session["channel"],
                         EPIC_RPG_BOT_ID,
                         session["type"],
-                        [session["equipment"]],
+                        {"item": session["equipment"]},
                         ENCHANT_CONFIG["RESPONSE_TIMEOUT"]
                     )
                 else:

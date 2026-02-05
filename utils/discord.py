@@ -117,7 +117,7 @@ class DiscordUtils:
         channel: Any,
         bot_id: str,
         command: str,
-        options: Optional[List[str]] = None,
+        options: Optional[Dict[str, Any]] = None,
         timeout_ms: int = 15 * 60 * 1000,
     ) -> Any:
         """
@@ -125,9 +125,9 @@ class DiscordUtils:
 
         Args:
             channel: Discord channel
-            bot_id: Target bot ID
+            bot_id: Target bot ID (application_id)
             command: Slash command name
-            options: Command options
+            options: Command options as keyword arguments
             timeout_ms: Timeout in milliseconds
 
         Returns:
@@ -136,37 +136,65 @@ class DiscordUtils:
         Raises:
             Exception: If failed to send or timeout
         """
-        options = options or []
+        import discord
 
-        # Note: discord.py-self uses different API for slash commands
-        # This is a placeholder that should be adapted based on the library's API
-        slash_response = await channel.send_slash(bot_id, command, *options)
+        options = options or {}
+        bot_id_int = int(bot_id)
 
-        if not slash_response:
-            raise Exception("Failed to send slash command")
+        # Get all application commands from the channel
+        commands = await channel.application_commands()
 
-        # Check if bot is "thinking" (deferred response)
-        if hasattr(slash_response, "flags") and "LOADING" in (slash_response.flags or []):
-            future: asyncio.Future[Any] = asyncio.get_event_loop().create_future()
+        # Find the slash command by name and application_id
+        slash_cmd = None
+        for cmd in commands:
+            if (
+                cmd.name == command
+                and cmd.application_id == bot_id_int
+                and isinstance(cmd, discord.SlashCommand)
+            ):
+                slash_cmd = cmd
+                break
 
-            def on_update(old_msg: Any, new_msg: Any) -> None:
-                if old_msg.id == slash_response.id and not future.done():
-                    channel.client.off("messageUpdate", on_update)
-                    future.set_result(new_msg)
+        if not slash_cmd:
+            raise Exception(f"Slash command '{command}' not found for bot {bot_id}")
 
-            # Set up timeout
-            async def timeout_handler() -> None:
-                await asyncio.sleep(timeout_ms / 1000)
-                if not future.done():
-                    channel.client.off("messageUpdate", on_update)
-                    future.set_exception(Exception("Timeout waiting for deferred bot response"))
+        # Set up listener for bot response before invoking
+        client = channel.guild._state._get_client() if hasattr(channel, 'guild') else None
+        if not client:
+            # Fallback: try to get client from channel
+            client = getattr(channel, '_state', None)
+            if client:
+                client = client._get_client()
 
-            asyncio.create_task(timeout_handler())
-            channel.client.on("messageUpdate", on_update)
+        future: asyncio.Future[Any] = asyncio.get_event_loop().create_future()
 
-            return await future
+        async def on_message(message: Any) -> None:
+            if (
+                str(message.author.id) == bot_id
+                and message.channel.id == channel.id
+                and not future.done()
+            ):
+                if client:
+                    client.remove_listener(on_message, "on_message")
+                future.set_result(message)
 
-        return slash_response
+        # Set up timeout
+        async def timeout_handler() -> None:
+            await asyncio.sleep(timeout_ms / 1000)
+            if not future.done():
+                if client:
+                    client.remove_listener(on_message, "on_message")
+                future.set_exception(Exception("Timeout waiting for bot response"))
+
+        if client:
+            client.add_listener(on_message, "on_message")
+
+        asyncio.create_task(timeout_handler())
+
+        # Invoke the slash command
+        await slash_cmd(channel, **options)
+
+        return await future
 
     @staticmethod
     async def wait_for_bot_response(
@@ -189,42 +217,33 @@ class DiscordUtils:
             Exception: If timeout waiting for response
         """
         future: asyncio.Future[Any] = asyncio.get_event_loop().create_future()
-        client = original_message.client
 
-        def on_message(message: Any) -> None:
-            if message.author.id == bot_id and message.channel.id == original_message.channel.id:
-                # Skip "thinking" messages
-                if hasattr(message, "flags") and "LOADING" in (message.flags or []):
-                    return
+        # Get client from message
+        client = getattr(original_message, '_state', None)
+        if client:
+            client = client._get_client()
 
-                if not future.done():
-                    cleanup()
-                    future.set_result(message)
+        if not client:
+            raise Exception("Could not get client from message")
 
-        def on_update(old_msg: Any, new_msg: Any) -> None:
-            if new_msg.author.id == bot_id and new_msg.channel.id == original_message.channel.id:
-                # Handle transition from "thinking" to actual response
-                old_flags = getattr(old_msg, "flags", []) or []
-                new_flags = getattr(new_msg, "flags", []) or []
-                if "LOADING" in old_flags and "LOADING" not in new_flags:
-                    if not future.done():
-                        cleanup()
-                        future.set_result(new_msg)
-
-        def cleanup() -> None:
-            client.off("messageCreate", on_message)
-            client.off("messageUpdate", on_update)
+        async def on_message(message: Any) -> None:
+            if (
+                str(message.author.id) == bot_id
+                and message.channel.id == original_message.channel.id
+                and not future.done()
+            ):
+                client.remove_listener(on_message, "on_message")
+                future.set_result(message)
 
         # Set up timeout
         async def timeout_handler() -> None:
             await asyncio.sleep(timeout_ms / 1000)
             if not future.done():
-                cleanup()
+                client.remove_listener(on_message, "on_message")
                 future.set_exception(Exception("Timeout waiting for bot response"))
 
+        client.add_listener(on_message, "on_message")
         asyncio.create_task(timeout_handler())
-        client.on("messageCreate", on_message)
-        client.on("messageUpdate", on_update)
 
         return await future
 
@@ -368,29 +387,52 @@ class DiscordUtils:
         """
         future: asyncio.Future[Any] = asyncio.get_event_loop().create_future()
 
-        def on_update(old_msg: Any, new_msg: Any) -> None:
-            # Check if this is the same message being updated by the bot
-            if new_msg.id == message.id and new_msg.author.id == bot_id:
+        # Get client from message
+        client = getattr(message, '_state', None)
+        if client:
+            client = client._get_client()
+
+        if not client:
+            raise Exception("Could not get client from message")
+
+        # Find and click the button
+        button = None
+        if message.components:
+            for row in message.components:
+                children = getattr(row, "children", []) or getattr(row, "components", [])
+                for component in children:
+                    if getattr(component, "custom_id", "") == custom_id:
+                        button = component
+                        break
+                if button:
+                    break
+
+        if not button:
+            raise Exception(f"Button with custom_id '{custom_id}' not found")
+
+        async def on_message_edit(before: Any, after: Any) -> None:
+            # Check if this is the same message being updated
+            if after.id == message.id and str(after.author.id) == bot_id:
                 if not future.done():
-                    message.client.off("messageUpdate", on_update)
-                    future.set_result(new_msg)
+                    client.remove_listener(on_message_edit, "on_message_edit")
+                    future.set_result(after)
 
         # Set up timeout
         async def timeout_handler() -> None:
             await asyncio.sleep(timeout_ms / 1000)
             if not future.done():
-                message.client.off("messageUpdate", on_update)
+                client.remove_listener(on_message_edit, "on_message_edit")
                 future.set_exception(Exception("Timeout waiting for button response"))
 
+        client.add_listener(on_message_edit, "on_message_edit")
         asyncio.create_task(timeout_handler())
-        message.client.on("messageUpdate", on_update)
 
-        # Click the button after setting up the listener
+        # Click the button
         try:
-            await message.click_button(custom_id)
+            await button.click()
         except Exception as e:
             if not future.done():
-                message.client.off("messageUpdate", on_update)
+                client.remove_listener(on_message_edit, "on_message_edit")
                 future.set_exception(e)
 
         return await future

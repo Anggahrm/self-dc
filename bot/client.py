@@ -131,13 +131,13 @@ class SelfBot(commands.Bot):
         """
         logger.info("Shutting down bot...")
 
-        # Cleanup managers
+        # Cleanup managers (these are sync methods, not async)
         if self.voice_manager:
-            await self.voice_manager.cleanup(disconnect=not preserve_voice)
+            self.voice_manager.cleanup(disconnect=not preserve_voice)
         if self.farm_manager:
-            await self.farm_manager.cleanup()
+            self.farm_manager.cleanup()
         if self.auto_enchant_manager:
-            await self.auto_enchant_manager.cleanup()
+            self.auto_enchant_manager.cleanup()
 
         # Close database
         await close_database()

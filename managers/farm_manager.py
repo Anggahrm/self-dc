@@ -82,7 +82,7 @@ class FarmManager(BaseManager):
                 self.channel,
                 EPIC_RPG_BOT_ID,
                 "heal",
-                [],
+                {},
                 FARM_CONFIG["RESPONSE_TIMEOUT"]
             )
 
@@ -129,7 +129,7 @@ class FarmManager(BaseManager):
                 self.channel,
                 EPIC_RPG_BOT_ID,
                 command,
-                [],
+                {},
                 FARM_CONFIG["RESPONSE_TIMEOUT"]
             )
 

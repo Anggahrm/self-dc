@@ -7,6 +7,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from managers.base_manager import BaseManager
+from utils.discord import DiscordUtils
 
 # Epic RPG Bot ID
 EPIC_RPG_BOT_ID = "555955826880413696"
@@ -129,11 +130,11 @@ class DebugManager(BaseManager):
             )
 
             # Send slash command and wait for response
-            response = await self._send_slash_and_wait(
+            response = await DiscordUtils.send_slash_and_wait(
                 message.channel,
                 EPIC_RPG_BOT_ID,
                 command,
-                [],
+                {},
                 TIMEOUTS["DEBUG_COMMAND"]
             )
 
@@ -472,51 +473,6 @@ class DebugManager(BaseManager):
             return True
         except Exception:
             return False
-
-    async def _send_slash_and_wait(
-        self,
-        channel: Any,
-        bot_id: str,
-        command: str,
-        options: List[Any],
-        timeout_ms: int
-    ) -> Optional[Any]:
-        """
-        Send a slash command and wait for response.
-
-        Args:
-            channel: Discord channel
-            bot_id: Bot ID to send command to
-            command: Command name
-            options: Command options
-            timeout_ms: Timeout in milliseconds
-
-        Returns:
-            Response message or None
-        """
-        import asyncio
-
-        # This is a placeholder - actual implementation depends on
-        # how slash commands are sent in discord.py-self
-        # The original JS code used DiscordUtils.sendSlashAndWait
-
-        # For discord.py-self, you would typically use:
-        # await channel.send_slash_command(bot_id, command, **options)
-        # and wait for the response
-
-        self.logger.debug(f"Sending slash command: {command} to bot {bot_id}")
-
-        # Placeholder implementation
-        # In real implementation, this would interact with the discord.py-self library
-        try:
-            # Example: await channel.send_slash_command(bot_id, command)
-            # Wait for response with timeout
-            await asyncio.sleep(0.1)  # Placeholder
-            return None
-        except asyncio.TimeoutError:
-            raise Exception("Timeout waiting for bot response")
-        except Exception as e:
-            raise Exception(f"Slash command failed: {e}")
 
     def get_stats(self) -> Dict[str, Any]:
         """
