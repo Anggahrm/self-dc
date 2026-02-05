@@ -17,21 +17,20 @@ Discord self-bot rewritten in Python using `discord.py-self`.
 ### Prerequisites
 
 - Python 3.11 or higher
-- pip
+- [uv](https://docs.astral.sh/uv/) (package manager)
 
 ### Setup
 
 ```bash
-# Create virtual environment
-python3 -m venv venv
+# Install uv (if not installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Activate
-source venv/bin/activate  # Linux/Mac
-# or
-venv\Scripts\activate  # Windows
+# Create virtual environment and install dependencies
+uv venv
+uv pip install -e .
 
-# Install dependencies
-pip install -r requirements.txt
+# Or with sync (recommended for production)
+uv sync
 ```
 
 ### Configuration
@@ -89,13 +88,15 @@ git push heroku main
 ## Project Structure
 
 ```
-self_dc_python/
 ├── bot/              # Core bot code
 ├── managers/         # Business logic managers
 ├── commands/         # Command handlers
 ├── repositories/     # Database repositories
 ├── utils/            # Utilities
-├── requirements.txt  # Python dependencies
+├── pyproject.toml    # Project config (uv)
+├── uv.lock          # Locked dependencies
+├── requirements.txt  # Python dependencies (fallback)
+├── .python-version   # Python version for Heroku
 ├── Procfile         # Heroku config
 └── main.py          # Entry point
 ```
