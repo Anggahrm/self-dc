@@ -169,8 +169,12 @@ class ErrorHandler {
    * Cleanup old error counts
    */
   cleanupErrorCounts() {
+    const hadErrors = this.errorCounts.size > 0;
     this.errorCounts.clear();
-    this.logger.debug('Error counts cleaned up');
+    // Only log if there were errors to clean up
+    if (hadErrors) {
+      this.logger.debug('Error counts cleaned up');
+    }
   }
 
   /**
