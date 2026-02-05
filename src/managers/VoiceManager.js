@@ -283,7 +283,7 @@ class VoiceManager extends BaseManager {
 
     // Wait for voice state to propagate (max 15s, 3 retries)
     const maxRetries = 3;
-    const retryDelay = 5000;
+    const retryDelay = 3000;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -331,6 +331,7 @@ class VoiceManager extends BaseManager {
       }
 
       // Check if connection is still open
+      const connection = connectionInfo.connection;
       if (connection.readyState !== 'open') {
         const failures = (this.heartbeatFailures.get(guildId) || 0) + 1;
         this.heartbeatFailures.set(guildId, failures);
@@ -512,7 +513,7 @@ class VoiceManager extends BaseManager {
       const connectionReady = await new Promise((resolve) => {
         const timeout = setTimeout(() => {
           resolve(false);
-        }, 15000); // Increased to 15s
+        }, 10000); // 10 second timeout
 
         // Check if already ready
         if (connection.readyState === 'open') {
@@ -541,7 +542,7 @@ class VoiceManager extends BaseManager {
       if (!connectionReady) {
         this.logger.warn(`[${corrId}] Connection did not become ready in time`);
         connection.disconnect();
-        this.setConnectionState(guildId, ConnectionState.IDLE);
+        this.cleanupGuildState(guildId);
         return null;
       }
 
@@ -682,8 +683,8 @@ class VoiceManager extends BaseManager {
 
     // Check if we should still be connected
     const savedConnection = this.connections.get(guildId);
-    if (savedConnection) {
-      this.logger.debug(`[${corrId}] Already connected, skipping reconnect`);
+    if (savedConnection && savedConnection.channelId === channel.id) {
+      this.logger.debug(`[${corrId}] Already connected to target channel, skipping reconnect`);
       return;
     }
 
@@ -692,7 +693,6 @@ class VoiceManager extends BaseManager {
       const freshChannel = this.client.channels.cache.get(channel.id);
       if (!freshChannel || !freshChannel.isVoice()) {
         this.logger.warn(`[${corrId}] Channel ${channel.id} no longer exists or is not a voice channel`);
-        this.recordCircuitFailure(guildId);
 
         const attempts = this.reconnectAttempts.get(guildId) || 0;
         if (attempts < this.maxReconnectAttempts) {
