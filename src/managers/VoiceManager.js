@@ -281,8 +281,8 @@ class VoiceManager extends BaseManager {
       return false;
     }
 
-    // Wait for voice state to propagate (max 15s, 3 retries)
-    const maxRetries = 3;
+    // Wait for voice state to propagate (max 12s, 4 retries with shorter delays)
+    const maxRetries = 4;
     const retryDelay = 3000;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -291,11 +291,7 @@ class VoiceManager extends BaseManager {
         const member = await guild.members.fetch(this.client.user.id);
         const actualChannelId = member.voice?.channelId;
 
-        // Also verify connection readyState is still open
-        const connection = this.connections.get(guildId)?.connection;
-        const isReady = connection?.readyState === 'open';
-
-        if (actualChannelId === expectedChannelId && isReady) {
+        if (actualChannelId === expectedChannelId) {
           return true;
         }
 
@@ -513,50 +509,18 @@ class VoiceManager extends BaseManager {
         selfVideo: false,
       });
 
-      // Wait for connection to be ready with timeout
-      const connectionReady = await new Promise((resolve) => {
-        const timeout = setTimeout(() => {
-          resolve(false);
-        }, 10000); // 10 second timeout
+      // For discord.js-selfbot-v13, ready event is unreliable
+      // Use voice state validation instead of waiting for ready event
+      this.logger.info(`[${corrId}] Waiting for voice state to propagate...`);
+      await DiscordUtils.sleep(2000); // Give Discord time to propagate
 
-        // Check if already ready
-        if (connection.readyState === 'open') {
-          clearTimeout(timeout);
-          resolve(true);
-          return;
-        }
-
-        // Wait for ready event
-        connection.once('ready', () => {
-          clearTimeout(timeout);
-          resolve(true);
-        });
-
-        connection.once('error', () => {
-          clearTimeout(timeout);
-          resolve(false);
-        });
-
-        connection.once('disconnect', () => {
-          clearTimeout(timeout);
-          resolve(false);
-        });
-      });
-
-      if (!connectionReady) {
-        this.logger.warn(`[${corrId}] Connection did not become ready in time`);
-        connection.disconnect();
-        this.cleanupGuildState(guildId);
-        return null;
-      }
-
-      // Validate connection via guild voice state (3 retries, 5s interval)
+      // Validate connection via guild voice state (primary source of truth)
       const isValid = await this.validateConnection(guildId, channel.id);
 
       if (!isValid) {
-        this.logger.error(`[${corrId}] Connection validation failed - bot not found in voice channel`);
+        this.logger.warn(`[${corrId}] Connection did not become ready in time`);
         connection.disconnect();
-        this.setConnectionState(guildId, ConnectionState.IDLE);
+        this.cleanupGuildState(guildId);
         return null;
       }
 
