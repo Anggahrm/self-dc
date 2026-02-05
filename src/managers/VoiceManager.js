@@ -331,7 +331,11 @@ class VoiceManager extends BaseManager {
       }
 
       // Check if connection is still open
-      const connection = connectionInfo.connection;
+      const connection = connectionInfo?.connection;
+      if (!connection) {
+        this.stopHeartbeat(guildId);
+        return;
+      }
       if (connection.readyState !== 'open') {
         const failures = (this.heartbeatFailures.get(guildId) || 0) + 1;
         this.heartbeatFailures.set(guildId, failures);
