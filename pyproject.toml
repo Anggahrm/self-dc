@@ -33,6 +33,7 @@ build-backend = "hatchling.build"
 allow-direct-references = true
 
 [tool.uv]
+package = false
 python-preference = "system"
 
 [tool.uv.pip]

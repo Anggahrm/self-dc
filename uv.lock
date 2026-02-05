@@ -1203,7 +1203,7 @@ wheels = [
 [[package]]
 name = "self-dc"
 version = "2.0.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "apscheduler" },
