@@ -107,6 +107,11 @@ client.on('messageCreate', async (message) => {
   await commandHandler.handle(message);
 });
 
+// Voice state update event for connection monitoring
+client.on('voiceStateUpdate', async (oldState, newState) => {
+  await voiceManager.handleVoiceStateUpdate(oldState, newState);
+});
+
 // Graceful shutdown
 process.on('exit', () => {
   logger.info('Shutting down...');
