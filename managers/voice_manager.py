@@ -259,7 +259,7 @@ class VoiceManager(BaseManager):
 
         return False
 
-    def start_heartbeat(self, guild_id: str, voice_client: discord.VoiceClient) -> None:
+    def start_heartbeat(self, guild_id: str, voice_client: Optional[discord.VoiceClient] = None) -> None:
         """Start heartbeat for a connection."""
         # Clear any existing heartbeat
         self.stop_heartbeat(guild_id)
@@ -273,9 +273,12 @@ class VoiceManager(BaseManager):
                 self.stop_heartbeat(guild_id)
                 return
 
-            # Check if connection is still valid using voice state
-            if not voice_client or not voice_client.is_connected():
+            # Check if voice_client is disconnected - trigger reconnect
+            if voice_client and not voice_client.is_connected():
+                corr_id = self.get_correlation_id(guild_id)
+                self.logger.warning(f"[{corr_id}] Voice client disconnected, triggering reconnect")
                 self.stop_heartbeat(guild_id)
+                await self.handle_disconnect(guild_id, connection_info, "voice_client_disconnected")
                 return
 
             # For discord.py, use voice state check
@@ -489,6 +492,8 @@ class VoiceManager(BaseManager):
                                 guild_id, str(channel.id), True, self_mute, self_deaf
                             )
                         self.logger.success(f"[{corr_id}] Successfully joined voice channel: {channel.name}")
+                        # Start heartbeat for monitoring (without voice_client)
+                        self.start_heartbeat(guild_id)
                         return connection_info
                 raise error
 

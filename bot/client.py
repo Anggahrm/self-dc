@@ -129,7 +129,7 @@ class SelfBot(commands.Bot):
             return
 
         if self.voice_manager:
-            await self.voice_manager.handle_voice_state_update(before, after)
+            await self.voice_manager.handle_voice_state_update(member, before, after)
 
     async def close(self, preserve_voice: bool = False):
         """
