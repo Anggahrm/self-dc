@@ -9,16 +9,16 @@ import sys
 import traceback
 from typing import Any, Callable, Dict, Optional
 
-from utils.logger import LoggerMixin, get_logger
+from utils.logger import get_logger
 
 logger = get_logger("ErrorHandler")
 
 
-class ErrorHandler(LoggerMixin):
+class ErrorHandler:
     """Global error handler for the bot."""
 
     def __init__(self):
-        super().__init__("ErrorHandler")
+        self.logger = get_logger("ErrorHandler")
         self.error_counts: Dict[str, int] = {}
         self.circuit_breakers: Dict[str, float] = {}
         self.max_errors_per_minute = 10

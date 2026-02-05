@@ -4,9 +4,9 @@ Handles debug commands and bot message inspection
 """
 
 import re
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
-from self_dc_python.managers.base_manager import BaseManager
+from managers.base_manager import BaseManager
 
 # Epic RPG Bot ID
 EPIC_RPG_BOT_ID = "555955826880413696"
@@ -50,7 +50,7 @@ class DebugManager(BaseManager):
         else:
             self._debug_mode = enabled
 
-        self.info(f"Debug mode {'enabled' if self._debug_mode else 'disabled'}")
+        self.logger.info(f"Debug mode {'enabled' if self._debug_mode else 'disabled'}")
         return self._debug_mode
 
     async def handle_debug_command(self, message: Any) -> bool:
@@ -197,7 +197,7 @@ class DebugManager(BaseManager):
         if len(self._logged_messages) > self._max_log_size:
             self._logged_messages = self._logged_messages[-self._max_log_size:]
 
-        self.debug(f"Logged message {message.id} from {log_entry['author_name']}")
+        self.logger.debug(f"Logged message {message.id} from {log_entry['author_name']}")
 
     async def log_bot_debug_info(self, message: Any) -> None:
         """
@@ -302,7 +302,7 @@ class DebugManager(BaseManager):
                 )
 
         except Exception as e:
-            self.error(f"Format error: {e}")
+            self.logger.error(f"Format error: {e}")
 
     def _format_embed(self, embed: Any, index: int) -> str:
         """
@@ -454,7 +454,7 @@ class DebugManager(BaseManager):
         try:
             return await channel.send(content)
         except Exception as e:
-            self.error(f"Failed to send message: {e}")
+            self.logger.error(f"Failed to send message: {e}")
             return None
 
     async def _safe_delete(self, message: Any) -> bool:
@@ -504,7 +504,7 @@ class DebugManager(BaseManager):
         # await channel.send_slash_command(bot_id, command, **options)
         # and wait for the response
 
-        self.debug(f"Sending slash command: {command} to bot {bot_id}")
+        self.logger.debug(f"Sending slash command: {command} to bot {bot_id}")
 
         # Placeholder implementation
         # In real implementation, this would interact with the discord.py-self library
@@ -535,7 +535,7 @@ class DebugManager(BaseManager):
     def clear_logs(self) -> None:
         """Clear all logged messages."""
         self._logged_messages.clear()
-        self.debug("Message logs cleared")
+        self.logger.debug("Message logs cleared")
 
     def get_logged_messages(
         self,

@@ -39,6 +39,7 @@ class SelfBot(commands.Bot):
         self.auto_enchant_manager = None
         self.event_handler = None
         self.debug_manager = None
+        self.command_handler = None
 
     async def setup_hook(self):
         """Called when bot is starting up."""
@@ -47,21 +48,35 @@ class SelfBot(commands.Bot):
         # Initialize database
         await init_database()
 
-        # Load extensions (cogs)
-        await self.load_extension("commands.command_handler")
-
         # Initialize managers
         from managers.farm_manager import FarmManager
         from managers.voice_manager import VoiceManager
         from managers.auto_enchant_manager import AutoEnchantManager
         from managers.event_handler import EventHandler
         from managers.debug_manager import DebugManager
+        from repositories.voice_repository import VoiceRepository
+        from bot.database import get_pool
+        from commands.command_handler import CommandHandler
 
         self.farm_manager = FarmManager(self)
-        self.voice_manager = VoiceManager(self)
+
+        # VoiceManager needs VoiceRepository
+        pool = await get_pool()
+        voice_repo = VoiceRepository(pool) if pool else None
+        self.voice_manager = VoiceManager(self, voice_repo)
+
         self.auto_enchant_manager = AutoEnchantManager(self)
         self.event_handler = EventHandler(self)
         self.debug_manager = DebugManager(self)
+
+        # Initialize command handler with all managers
+        self.command_handler = CommandHandler(self, {
+            "farm_manager": self.farm_manager,
+            "voice_manager": self.voice_manager,
+            "auto_enchant_manager": self.auto_enchant_manager,
+            "event_handler": self.event_handler,
+            "debug_manager": self.debug_manager,
+        })
 
         logger.success("Bot setup complete")
 
@@ -89,8 +104,9 @@ class SelfBot(commands.Bot):
                 await self.event_handler.handle_message(message)
             return
 
-        # Process commands
-        await self.process_commands(message)
+        # Process commands through our CommandHandler
+        if self.command_handler:
+            await self.command_handler.handle(message)
 
     async def on_voice_state_update(
         self,

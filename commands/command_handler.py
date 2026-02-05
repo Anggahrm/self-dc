@@ -12,10 +12,10 @@ except ImportError:
     DISCORD_AVAILABLE = False
     discord = None
 
-from self_dc_python.commands.command_registry import registry, Command
-from self_dc_python.utils.logger import LoggerMixin
-from self_dc_python.utils.discord import DiscordUtils
-from self_dc_python.utils.validation import ValidationUtils
+from commands.command_registry import registry, Command
+from utils.logger import get_logger
+from utils.discord import DiscordUtils
+from utils.validation import ValidationUtils
 
 # Epic RPG Bot ID
 EPIC_RPG_BOT_ID = "555955826880413696"
@@ -24,11 +24,11 @@ EPIC_RPG_BOT_ID = "555955826880413696"
 PREFIX = "."
 
 
-class CommandHandler(LoggerMixin):
+class CommandHandler:
     """Handles command parsing and execution."""
 
     def __init__(self, client: Any, managers: Dict[str, Any]):
-        super().__init__("Command")
+        self.logger = get_logger("Command")
         self.client = client
         self.managers = managers
 
@@ -227,7 +227,7 @@ class CommandHandler(LoggerMixin):
             self._cmd_help,
         )
 
-        self.info(f"Registered {len(registry.get_all())} commands")
+        self.logger.info(f"Registered {len(registry.get_all())} commands")
 
     # Command Handlers
 
@@ -418,12 +418,12 @@ class CommandHandler(LoggerMixin):
 
         # Execute command
         try:
-            self.debug(f"Executing: {command.name}")
+            self.logger.debug(f"Executing: {command.name}")
             if hasattr(self.client, "monitoring") and self.client.monitoring:
                 self.client.monitoring.record_command()
             await command.handler(message, args, self)
         except Exception as error:
-            self.error(f"Command error ({command.name}): {error}")
+            self.logger.error(f"Command error ({command.name}): {error}")
             if hasattr(self.client, "monitoring") and self.client.monitoring:
                 self.client.monitoring.record_error()
 
@@ -610,3 +610,10 @@ class CommandHandler(LoggerMixin):
             help_text = registry.generate_command_help(command_name)
             return help_text or f"❌ Unknown command: `{command_name}`"
         return registry.generate_help()
+
+
+async def setup(bot):
+    """Setup function for discord.py extension loading."""
+    # The CommandHandler is initialized directly in client.py through managers
+    # This setup function is required for load_extension but we handle initialization elsewhere
+    pass

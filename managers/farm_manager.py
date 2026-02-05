@@ -6,8 +6,8 @@ Handles automatic farming commands (adventure, hunt, heal)
 import asyncio
 from typing import Any, Dict, Optional
 
-from self_dc_python.managers.base_manager import BaseManager
-from self_dc_python.utils.discord import DiscordUtils
+from managers.base_manager import BaseManager
+from utils.discord import DiscordUtils
 
 
 # Epic RPG Bot ID
@@ -62,20 +62,20 @@ class FarmManager(BaseManager):
 
         # Heal if HP percentage is low OR absolute HP is low
         if hp_percentage < FARM_CONFIG["HEAL_HP_PERCENT"] or hp_data["current"] < FARM_CONFIG["HEAL_HP_MIN"]:
-            self.warning(f"HP low ({hp_data['current']}/{hp_data['max']} - {round(hp_percentage)}%), healing...")
+            self.logger.warning(f"HP low ({hp_data['current']}/{hp_data['max']} - {round(hp_percentage)}%), healing...")
             await self.trigger_heal()
             await DiscordUtils.sleep(FARM_CONFIG["HEAL_DELAY"])
         else:
-            self.debug(f"HP healthy ({hp_data['current']}/{hp_data['max']} - {round(hp_percentage)}%)")
+            self.logger.debug(f"HP healthy ({hp_data['current']}/{hp_data['max']} - {round(hp_percentage)}%)")
 
     async def trigger_heal(self) -> None:
         """Execute heal command."""
         if self.states["heal"]["executing"]:
-            self.debug("Heal already in progress, skipping")
+            self.logger.debug("Heal already in progress, skipping")
             return
 
         self.states["heal"]["executing"] = True
-        self.info("[COMMAND] heal - Emergency heal triggered")
+        self.logger.info("[COMMAND] heal - Emergency heal triggered")
 
         try:
             response = await DiscordUtils.send_slash_and_wait(
@@ -95,9 +95,9 @@ class FarmManager(BaseManager):
                 import re
                 heal_match = re.search(r"healed.*?(\d+).*?hp", content, re.IGNORECASE)
                 if heal_match:
-                    self.success(f"Healed {heal_match.group(1)} HP")
+                    self.logger.success(f"Healed {heal_match.group(1)} HP")
                 else:
-                    self.success("Heal completed")
+                    self.logger.success("Heal completed")
         except Exception as error:
             self._handle_error("heal", error)
         finally:
@@ -122,7 +122,7 @@ class FarmManager(BaseManager):
             return
 
         self.states[command]["executing"] = True
-        self.info(f"[COMMAND] {command} - Executing")
+        self.logger.info(f"[COMMAND] {command} - Executing")
 
         try:
             response = await DiscordUtils.send_slash_and_wait(
@@ -142,7 +142,7 @@ class FarmManager(BaseManager):
                 # Check for cooldown
                 cooldown_ms = DiscordUtils.check_for_cooldown(response)
                 if cooldown_ms > 0:
-                    self.warning(f"{command} on cooldown: {int(cooldown_ms / 1000)}s")
+                    self.logger.warning(f"{command} on cooldown: {int(cooldown_ms / 1000)}s")
                     await self._handle_cooldown(command, cooldown_ms)
                     return
 
@@ -150,7 +150,7 @@ class FarmManager(BaseManager):
                 if command in ("adventure", "hunt"):
                     await self.check_and_heal(response)
 
-                self.success(f"{command} completed")
+                self.logger.success(f"{command} completed")
         except Exception as error:
             self._handle_error(command, error)
         finally:
@@ -180,7 +180,7 @@ class FarmManager(BaseManager):
                     if self.states[command]["enabled"] and self.enabled:
                         self._schedule_next(command)
                 except Exception as error:
-                    self.error(f"Cooldown execution error for {command}: {error}")
+                    self.logger.error(f"Cooldown execution error for {command}: {error}")
 
         self.set_managed_timer(timer_name, cooldown_callback, cooldown_ms + 2000)
 
@@ -196,7 +196,7 @@ class FarmManager(BaseManager):
 
     async def handle_epic_guard(self) -> None:
         """Handle EPIC Guard detection."""
-        self.error("EPIC GUARD DETECTED! Auto-stopping farm for safety")
+        self.logger.error("EPIC GUARD DETECTED! Auto-stopping farm for safety")
         if self.channel:
             await DiscordUtils.safe_send(self.channel, "⚠️ **EPIC GUARD DETECTED!** Farm stopped automatically for safety.")
         self.stop()
@@ -211,9 +211,9 @@ class FarmManager(BaseManager):
         """
         error_msg = str(error)
         if "Timeout waiting for deferred bot response" in error_msg:
-            self.warning(f"{command}: Bot response timeout")
+            self.logger.warning(f"{command}: Bot response timeout")
         else:
-            self.error(f"{command} failed: {error_msg}")
+            self.logger.error(f"{command} failed: {error_msg}")
 
     def _schedule_next(self, command: str) -> None:
         """
@@ -241,7 +241,7 @@ class FarmManager(BaseManager):
                     if self.states[command]["enabled"] and self.enabled:
                         self._schedule_next(command)
                 except Exception as error:
-                    self.error(f"Schedule execution error for {command}: {error}")
+                    self.logger.error(f"Schedule execution error for {command}: {error}")
 
         self.set_managed_timer(timer_name, schedule_callback, cooldown)
 
@@ -259,7 +259,7 @@ class FarmManager(BaseManager):
 
         self.states[command]["enabled"] = True
         self.states[command]["on_cooldown"] = False
-        self.info(f"{command} timer started")
+        self.logger.info(f"{command} timer started")
 
         async def start_callback() -> None:
             try:
@@ -267,7 +267,7 @@ class FarmManager(BaseManager):
                 if self.states[command]["enabled"] and self.enabled:
                     self._schedule_next(command)
             except Exception as error:
-                self.error(f"Start command error for {command}: {error}")
+                self.logger.error(f"Start command error for {command}: {error}")
 
         # Execute immediately (don't wait for timer)
         asyncio.create_task(start_callback())
@@ -288,7 +288,7 @@ class FarmManager(BaseManager):
         self._clear_command_timer(command)
         self.clear_managed_timer(f"schedule_{command}")
 
-        self.info(f"{command} timer stopped")
+        self.logger.info(f"{command} timer stopped")
 
     async def start_farm(self, channel: Any) -> None:
         """
@@ -298,12 +298,12 @@ class FarmManager(BaseManager):
             channel: Discord channel
         """
         if self.enabled:
-            self.warning("Farm already running")
+            self.logger.warning("Farm already running")
             return
 
         self.enabled = True
         self.channel = channel
-        self.success("Auto Farm Started")
+        self.logger.success("Auto Farm Started")
 
         await DiscordUtils.safe_send(channel, "🌾 **Auto Farm Started**\nRunning: adventure, axe, hunt with auto-heal")
 
@@ -316,14 +316,14 @@ class FarmManager(BaseManager):
             self._start_command_timer("adventure")
             self._start_command_timer("axe")
             self._start_command_timer("hunt")
-            self.info("All farm timers running")
+            self.logger.info("All farm timers running")
 
         asyncio.create_task(start_timers())
 
     def stop_farm(self) -> None:
         """Stop auto farm."""
         if not self.enabled:
-            self.warning("Farm not running")
+            self.logger.warning("Farm not running")
             return
 
         self.enabled = False
@@ -332,7 +332,7 @@ class FarmManager(BaseManager):
         self._stop_command_timer("hunt")
         self.states["heal"]["executing"] = False
 
-        self.success("Auto Farm Stopped")
+        self.logger.success("Auto Farm Stopped")
 
         if self.channel:
             asyncio.create_task(DiscordUtils.safe_send(self.channel, "🛑 **Auto Farm Stopped**"))

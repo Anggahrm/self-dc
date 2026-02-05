@@ -5,7 +5,7 @@ Centralized command registration and management
 
 from typing import Any, Callable, Dict, List, Optional
 
-from self_dc_python.utils.logger import LoggerMixin
+from utils.logger import get_logger
 
 # Command handler type alias
 CommandHandler = Callable[[Any, List[str], Any], Any]
@@ -69,11 +69,11 @@ class Command:
         return self.definition.guild_only
 
 
-class CommandRegistry(LoggerMixin):
+class CommandRegistry:
     """Centralized command registration and management."""
 
     def __init__(self):
-        super().__init__("CommandRegistry")
+        self.logger = get_logger("CommandRegistry")
         self.commands: Dict[str, Command] = {}
         self.aliases: Dict[str, str] = {}
         self.categories: Dict[str, List[Command]] = {}
@@ -124,7 +124,7 @@ class CommandRegistry(LoggerMixin):
             self.categories[definition.category] = []
         self.categories[definition.category].append(command)
 
-        self.debug(f"Registered command: {definition.name}")
+        self.logger.debug(f"Registered command: {definition.name}")
         return self
 
     def get(self, name: str) -> Optional[Command]:

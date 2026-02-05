@@ -6,8 +6,8 @@ Handles automatic event detection and response (catching events)
 import asyncio
 from typing import Any, Dict, Optional
 
-from self_dc_python.managers.base_manager import BaseManager
-from self_dc_python.bot.config import config
+from managers.base_manager import BaseManager
+from bot.config import config
 
 # Epic RPG Bot ID
 EPIC_RPG_BOT_ID = "555955826880413696"
@@ -99,7 +99,7 @@ class EventHandler(BaseManager):
     def set_auto_join(self, enabled: bool) -> None:
         """Enable/disable auto-join for events."""
         self._auto_join = enabled
-        self.info(f"Auto-join {'enabled' if enabled else 'disabled'}")
+        self.logger.info(f"Auto-join {'enabled' if enabled else 'disabled'}")
 
     def is_event_message(self, message: Any) -> bool:
         """
@@ -145,7 +145,7 @@ class EventHandler(BaseManager):
 
         # Handle "thinking" messages (deferral in discord.py)
         if message.flags and message.flags.ephemeral:
-            self.debug("Bot thinking, waiting for content...")
+            self.logger.debug("Bot thinking, waiting for content...")
 
             # Use BaseManager's registerPendingMessage for proper cleanup
             resolver = self.register_pending_message(
@@ -180,7 +180,7 @@ class EventHandler(BaseManager):
 
     def _on_thinking_resolved(self, new_msg: Any) -> None:
         """Callback when a thinking message is resolved."""
-        self.debug("Bot finished thinking, checking for events")
+        self.logger.debug("Bot finished thinking, checking for events")
         asyncio.create_task(self._process_event_detection(new_msg))
 
     async def _process_event_detection(self, message: Any) -> None:
@@ -198,7 +198,7 @@ class EventHandler(BaseManager):
                 detected_event = self._detect_event(embed, event_config)
 
                 if detected_event:
-                    self.success(f"{event_name} detected! Auto-responding...")
+                    self.logger.success(f"{event_name} detected! Auto-responding...")
                     await self.join_event(message, detected_event, event_name)
                     return  # Only respond to first detected event
 
@@ -291,12 +291,12 @@ class EventHandler(BaseManager):
             True if successfully joined event
         """
         if not self._auto_join:
-            self.debug(f"Auto-join disabled, skipping {event_name}")
+            self.logger.debug(f"Auto-join disabled, skipping {event_name}")
             return False
 
         # Check cooldown
         if self._is_on_cooldown(event_name):
-            self.debug(f"{event_name} is on cooldown")
+            self.logger.debug(f"{event_name} is on cooldown")
             return False
 
         # Small delay before responding
@@ -308,7 +308,7 @@ class EventHandler(BaseManager):
             if button_id and message.components:
                 clicked = await self._click_button(message, button_id)
                 if clicked:
-                    self.success(f"{event_name}: Button clicked ({button_id})")
+                    self.logger.success(f"{event_name}: Button clicked ({button_id})")
                     self._set_cooldown(event_name)
                     return True
 
@@ -319,29 +319,29 @@ class EventHandler(BaseManager):
                 if found_button_id:
                     clicked = await self._click_button(message, found_button_id)
                     if clicked:
-                        self.success(f"{event_name}: Button clicked ({found_button_id})")
+                        self.logger.success(f"{event_name}: Button clicked ({found_button_id})")
                         self._set_cooldown(event_name)
                         return True
 
             # Fall back to typing response
             response_text = event.get("RESPONSE", "")
             await message.channel.send(response_text)
-            self.success(f"{event_name}: Response typed ({response_text})")
+            self.logger.success(f"{event_name}: Response typed ({response_text})")
             self._set_cooldown(event_name)
             return True
 
         except Exception as e:
-            self.error(f"{event_name} response failed: {e}")
+            self.logger.error(f"{event_name} response failed: {e}")
 
             # Fallback: try typing response
             try:
                 response_text = event.get("RESPONSE", "")
                 await message.channel.send(response_text)
-                self.success(f"{event_name}: Fallback response typed")
+                self.logger.success(f"{event_name}: Fallback response typed")
                 self._set_cooldown(event_name)
                 return True
             except Exception as fallback_error:
-                self.error(f"{event_name} fallback failed: {fallback_error}")
+                self.logger.error(f"{event_name} fallback failed: {fallback_error}")
                 return False
 
     async def _click_button(self, message: Any, button_id: str) -> bool:

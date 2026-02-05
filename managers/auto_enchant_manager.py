@@ -7,8 +7,8 @@ Supports: enchant, refine, transmute, transcend
 import re
 from typing import Any, Dict, List, Optional
 
-from self_dc_python.managers.base_manager import BaseManager
-from self_dc_python.utils.discord import DiscordUtils
+from managers.base_manager import BaseManager
+from utils.discord import DiscordUtils
 
 
 # Epic RPG Bot ID
@@ -119,7 +119,7 @@ class AutoEnchantManager(BaseManager):
 
         self.sessions[session_key] = session
 
-        self.success(f"Auto {enchant_type} started for {equipment} targeting {target_enchant.upper()}")
+        self.logger.success(f"Auto {enchant_type} started for {equipment} targeting {target_enchant.upper()}")
 
         await DiscordUtils.safe_send(channel, "\n".join([
             f"✨ **Auto {enchant_type.capitalize()} Started**",
@@ -153,7 +153,7 @@ class AutoEnchantManager(BaseManager):
 
         duration = round((__import__("time").time() - session["start_time"]))
 
-        self.info(f"Auto {session['type']} stopped after {session['attempts']} attempts ({duration}s)")
+        self.logger.info(f"Auto {session['type']} stopped after {session['attempts']} attempts ({duration}s)")
 
         await DiscordUtils.safe_send(channel, "\n".join([
             f"🛑 **Auto {session['type'].capitalize()} Stopped**",
@@ -180,7 +180,7 @@ class AutoEnchantManager(BaseManager):
             try:
                 session["attempts"] += 1
 
-                self.info(f"[COMMAND] {session['type']} - Attempt #{session['attempts']} for {session['equipment']}")
+                self.logger.info(f"[COMMAND] {session['type']} - Attempt #{session['attempts']} for {session['equipment']}")
 
                 response = None
 
@@ -188,7 +188,7 @@ class AutoEnchantManager(BaseManager):
                 # Subsequent attempts: use "ENCHANT AGAIN" button if available
                 if session["attempts"] == 1 or not last_response or not self._has_enchant_again_button(last_response):
                     # Send slash command
-                    self.debug("Using slash command")
+                    self.logger.debug("Using slash command")
                     response = await DiscordUtils.send_slash_and_wait(
                         session["channel"],
                         EPIC_RPG_BOT_ID,
@@ -198,7 +198,7 @@ class AutoEnchantManager(BaseManager):
                     )
                 else:
                     # Click "ENCHANT AGAIN" button
-                    self.debug("Using ENCHANT AGAIN button")
+                    self.logger.debug("Using ENCHANT AGAIN button")
                     response = await DiscordUtils.click_button_and_wait(
                         last_response,
                         ENCHANT_CONFIG["BUTTON_ID"],
@@ -207,7 +207,7 @@ class AutoEnchantManager(BaseManager):
                     )
 
                 if not response:
-                    self.warning("No response from bot, retrying with slash command...")
+                    self.logger.warning("No response from bot, retrying with slash command...")
                     last_response = None  # Reset to use slash command next time
                     await DiscordUtils.sleep(ENCHANT_CONFIG["RETRY_DELAY"])
                     continue
@@ -217,7 +217,7 @@ class AutoEnchantManager(BaseManager):
 
                 # Check for EPIC Guard
                 if DiscordUtils.check_for_epic_guard(response):
-                    self.error("EPIC GUARD DETECTED! Stopping auto enchant for safety")
+                    self.logger.error("EPIC GUARD DETECTED! Stopping auto enchant for safety")
                     await DiscordUtils.safe_send(
                         session["channel"],
                         "⚠️ **EPIC GUARD DETECTED!** Auto enchant stopped for safety."
@@ -229,7 +229,7 @@ class AutoEnchantManager(BaseManager):
                 # Check for cooldown
                 cooldown_ms = DiscordUtils.check_for_cooldown(response)
                 if cooldown_ms > 0:
-                    self.warning(f"Cooldown detected: {int(cooldown_ms / 1000)}s")
+                    self.logger.warning(f"Cooldown detected: {int(cooldown_ms / 1000)}s")
                     await DiscordUtils.safe_send(
                         session["channel"],
                         f"⏳ Cooldown: {int(cooldown_ms / 1000)}s - waiting..."
@@ -240,7 +240,7 @@ class AutoEnchantManager(BaseManager):
 
                 # Check for insufficient coins
                 if self._check_insufficient_coins(response):
-                    self.error("Insufficient coins! Stopping auto enchant")
+                    self.logger.error("Insufficient coins! Stopping auto enchant")
                     await DiscordUtils.safe_send(
                         session["channel"],
                         "💰 **Insufficient coins!** Auto enchant stopped."
@@ -253,13 +253,13 @@ class AutoEnchantManager(BaseManager):
                 result = self._parse_enchant_result(response)
 
                 if result:
-                    self.info(f"Got: {result['enchant']} (+{result['bonus']}%)")
+                    self.logger.info(f"Got: {result['enchant']} (+{result['bonus']}%)")
 
                     # Check if target reached
                     if self._is_target_reached(result["enchant"], session["target_enchant"]):
                         duration = round((__import__("time").time() - session["start_time"]))
 
-                        self.success(f"Target {session['target_enchant']} reached!")
+                        self.logger.success(f"Target {session['target_enchant']} reached!")
 
                         await DiscordUtils.safe_send(session["channel"], "\n".join([
                             "🎉 **Target Enchant Achieved!**",
@@ -279,10 +279,10 @@ class AutoEnchantManager(BaseManager):
                 await DiscordUtils.sleep(ENCHANT_CONFIG["RETRY_DELAY"])
 
             except Exception as error:
-                self.error(f"Enchant error: {error}")
+                self.logger.error(f"Enchant error: {error}")
 
                 if "Timeout" in str(error):
-                    self.warning("Bot response timeout, retrying with slash command...")
+                    self.logger.warning("Bot response timeout, retrying with slash command...")
                     last_response = None  # Reset to use slash command on error
                 else:
                     # Stop on unexpected errors

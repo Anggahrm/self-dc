@@ -11,8 +11,8 @@ from typing import Any, Dict, Optional
 
 import discord
 
-from self_dc_python.managers.base_manager import BaseManager
-from self_dc_python.repositories.voice_repository import VoiceRepository
+from managers.base_manager import BaseManager
+from repositories.voice_repository import VoiceRepository
 
 
 class ConnectionState(Enum):
@@ -97,7 +97,7 @@ class VoiceManager(BaseManager):
 
         if old_state != state:
             corr_id = self.get_correlation_id(guild_id)
-            self.info(f"[{corr_id}] State transition: {old_state.value} -> {state.value}")
+            self.logger.info(f"[{corr_id}] State transition: {old_state.value} -> {state.value}")
 
     def get_circuit_breaker(self, guild_id: str) -> Dict[str, Any]:
         """Get circuit breaker state for a guild."""
@@ -121,7 +121,7 @@ class VoiceManager(BaseManager):
 
         if old_state != CircuitState.CLOSED:
             corr_id = self.get_correlation_id(guild_id)
-            self.success(f"[{corr_id}] Circuit breaker CLOSED (connection successful)")
+            self.logger.success(f"[{corr_id}] Circuit breaker CLOSED (connection successful)")
 
     def record_circuit_failure(self, guild_id: str) -> None:
         """Record circuit breaker failure."""
@@ -133,10 +133,10 @@ class VoiceManager(BaseManager):
 
         if cb["state"] == CircuitState.HALF_OPEN:
             cb["state"] = CircuitState.OPEN
-            self.warning(f"[{corr_id}] Circuit breaker OPEN (test request failed)")
+            self.logger.warning(f"[{corr_id}] Circuit breaker OPEN (test request failed)")
         elif cb["failures"] >= self.circuit_breaker_threshold and cb["state"] == CircuitState.CLOSED:
             cb["state"] = CircuitState.OPEN
-            self.warning(f"[{corr_id}] Circuit breaker OPEN after {cb['failures']} consecutive failures")
+            self.logger.warning(f"[{corr_id}] Circuit breaker OPEN after {cb['failures']} consecutive failures")
 
     def can_attempt_reconnect(self, guild_id: str) -> bool:
         """Check if circuit breaker allows request."""
@@ -153,19 +153,19 @@ class VoiceManager(BaseManager):
                 cb["state"] = CircuitState.HALF_OPEN
                 cb["test_request_allowed"] = True
                 corr_id = self.get_correlation_id(guild_id)
-                self.info(f"[{corr_id}] Circuit breaker HALF-OPEN (allowing test request)")
+                self.logger.info(f"[{corr_id}] Circuit breaker HALF-OPEN (allowing test request)")
                 return True
 
             remaining_cooldown = int((self.circuit_breaker_cooldown - time_since_failure) / 1000)
             corr_id = self.get_correlation_id(guild_id)
-            self.warning(f"[{corr_id}] Circuit breaker OPEN, pausing reconnects ({remaining_cooldown}s cooldown remaining)")
+            self.logger.warning(f"[{corr_id}] Circuit breaker OPEN, pausing reconnects ({remaining_cooldown}s cooldown remaining)")
             return False
 
         if cb["state"] == CircuitState.HALF_OPEN:
             if cb["test_request_allowed"]:
                 cb["test_request_allowed"] = False
                 corr_id = self.get_correlation_id(guild_id)
-                self.info(f"[{corr_id}] Circuit breaker allowing test request (HALF_OPEN)")
+                self.logger.info(f"[{corr_id}] Circuit breaker allowing test request (HALF_OPEN)")
                 return True
             return False
 
@@ -194,14 +194,14 @@ class VoiceManager(BaseManager):
                 attempts = self.reconnect_attempts.get(guild_id, 0)
                 if attempts > 0:
                     corr_id = self.get_correlation_id(guild_id)
-                    self.info(f"[{corr_id}] Connection stable for {int(stable_duration / 1000)}s, resetting reconnect attempts")
+                    self.logger.info(f"[{corr_id}] Connection stable for {int(stable_duration / 1000)}s, resetting reconnect attempts")
                     self.reconnect_attempts.pop(guild_id, None)
                     self.record_circuit_success(guild_id)
 
     async def initialize(self) -> None:
         """Initialize voice manager and restore connections from database."""
         if not self.voice_repository:
-            self.info("Database not connected - voice settings will not persist")
+            self.logger.info("Database not connected - voice settings will not persist")
             return
 
         try:
@@ -212,7 +212,7 @@ class VoiceManager(BaseManager):
                     channel = self.client.get_channel(int(settings["channel_id"]))
                     if channel and isinstance(channel, discord.VoiceChannel):
                         corr_id = self.reset_correlation_id(settings["guild_id"])
-                        self.info(f"[{corr_id}] Restoring voice connection to {channel.name}")
+                        self.logger.info(f"[{corr_id}] Restoring voice connection to {channel.name}")
                         await self.join_channel(
                             channel,
                             settings.get("self_mute", True),
@@ -221,12 +221,12 @@ class VoiceManager(BaseManager):
                         )
                     else:
                         # Channel no longer exists, cleanup DB
-                        self.warning(f"Voice channel {settings['channel_id']} no longer exists, removing from database")
+                        self.logger.warning(f"Voice channel {settings['channel_id']} no longer exists, removing from database")
                         await self.voice_repository.delete_by_guild_id(settings["guild_id"])
                 except Exception as error:
-                    self.warning(f"Failed to restore voice connection: {error}")
+                    self.logger.warning(f"Failed to restore voice connection: {error}")
         except Exception as error:
-            self.error(f"Failed to initialize voice connections: {error}")
+            self.logger.error(f"Failed to initialize voice connections: {error}")
 
     async def validate_connection(self, guild_id: str, expected_channel_id: str) -> bool:
         """Validate that bot is actually in the voice channel."""
@@ -253,7 +253,7 @@ class VoiceManager(BaseManager):
                 if attempt < max_retries:
                     await asyncio.sleep(retry_delay)
             except Exception as error:
-                self.debug(f"Validation attempt {attempt} failed: {error}")
+                self.logger.debug(f"Validation attempt {attempt} failed: {error}")
                 if attempt < max_retries:
                     await asyncio.sleep(retry_delay)
 
@@ -297,14 +297,14 @@ class VoiceManager(BaseManager):
 
                     corr_id = self.get_correlation_id(guild_id)
                     if failures >= self.max_heartbeat_failures:
-                        self.warning(f"[{corr_id}] Heartbeat failed {failures}x (not in voice), triggering reconnect")
+                        self.logger.warning(f"[{corr_id}] Heartbeat failed {failures}x (not in voice), triggering reconnect")
                         self.stop_heartbeat(guild_id)
                         await self.handle_disconnect(guild_id, connection_info, "heartbeat_failure")
                     else:
-                        self.debug(f"[{corr_id}] Heartbeat warning ({failures}/{self.max_heartbeat_failures})")
+                        self.logger.debug(f"[{corr_id}] Heartbeat warning ({failures}/{self.max_heartbeat_failures})")
                     return
             except Exception as error:
-                self.debug(f"Heartbeat voice check failed: {error}")
+                self.logger.debug(f"Heartbeat voice check failed: {error}")
 
             # Reset failures on success
             self.heartbeat_failures[guild_id] = 0
@@ -354,20 +354,20 @@ class VoiceManager(BaseManager):
             new_channel_id = str(after.channel.id) if after.channel else None
 
             # Log state change
-            self.info(f"[{corr_id}] Voice state update: {old_channel_id or 'null'} -> {new_channel_id or 'null'}")
+            self.logger.info(f"[{corr_id}] Voice state update: {old_channel_id or 'null'} -> {new_channel_id or 'null'}")
 
             # Detect disconnect (left voice channel)
             if old_channel_id and not new_channel_id:
                 connection_info = self.connections.get(guild_id)
                 if connection_info:
-                    self.warning(f"[{corr_id}] Detected disconnect from {connection_info['channel_name']}")
+                    self.logger.warning(f"[{corr_id}] Detected disconnect from {connection_info['channel_name']}")
                     await self.handle_disconnect(guild_id, connection_info, "voice_state_update")
 
             # Detect channel change
             if old_channel_id and new_channel_id and old_channel_id != new_channel_id:
-                self.info(f"[{corr_id}] Channel change detected: {old_channel_id} -> {new_channel_id}")
+                self.logger.info(f"[{corr_id}] Channel change detected: {old_channel_id} -> {new_channel_id}")
         except Exception as error:
-            self.error(f"Error handling voice state update: {error}")
+            self.logger.error(f"Error handling voice state update: {error}")
 
     async def handle_disconnect(
         self,
@@ -380,7 +380,7 @@ class VoiceManager(BaseManager):
 
         # Don't reconnect if shutting down
         if self.is_shutting_down:
-            self.info(f"[{corr_id}] Not reconnecting - shutdown in progress")
+            self.logger.info(f"[{corr_id}] Not reconnecting - shutdown in progress")
             return
 
         # Update state
@@ -402,10 +402,10 @@ class VoiceManager(BaseManager):
 
         # Trigger reconnect if we have channel info
         if channel and isinstance(channel, discord.VoiceChannel):
-            self.info(f"[{corr_id}] Scheduling reconnect after {reason}")
+            self.logger.info(f"[{corr_id}] Scheduling reconnect after {reason}")
             self.schedule_reconnect(guild_id, channel, self_mute, self_deaf)
         else:
-            self.warning(f"[{corr_id}] Cannot reconnect - channel no longer available")
+            self.logger.warning(f"[{corr_id}] Cannot reconnect - channel no longer available")
             self.cleanup_guild_state(guild_id)
 
     async def join_channel(
@@ -428,7 +428,7 @@ class VoiceManager(BaseManager):
             Voice connection info or None
         """
         if not channel or not isinstance(channel, discord.VoiceChannel):
-            self.error("Invalid voice channel")
+            self.logger.error("Invalid voice channel")
             return None
 
         guild_id = str(channel.guild.id)
@@ -436,7 +436,7 @@ class VoiceManager(BaseManager):
         # Check if already connected to this channel
         existing_connection = self.connections.get(guild_id)
         if existing_connection and existing_connection["channel_id"] == str(channel.id):
-            self.warning(f"Already connected to {channel.name}")
+            self.logger.warning(f"Already connected to {channel.name}")
             return existing_connection
 
         # Generate new correlation ID for this connection attempt
@@ -451,7 +451,7 @@ class VoiceManager(BaseManager):
                 await self.disconnect(guild_id, False)
                 await asyncio.sleep(0.5)
 
-            self.info(f"[{corr_id}] Joining voice channel: {channel.name}")
+            self.logger.info(f"[{corr_id}] Joining voice channel: {channel.name}")
 
             # Join the voice channel
             voice_client = None
@@ -465,11 +465,11 @@ class VoiceManager(BaseManager):
                 # Check if we're actually connected via voice state
                 error_msg = str(error)
                 if "timeout" in error_msg.lower() or "connection" in error_msg.lower():
-                    self.warning(f"[{corr_id}] Library timeout, checking voice state...")
+                    self.logger.warning(f"[{corr_id}] Library timeout, checking voice state...")
                     await asyncio.sleep(2)
                     is_in_channel = await self.validate_connection(guild_id, str(channel.id))
                     if is_in_channel:
-                        self.info(f"[{corr_id}] Voice state confirmed, connection successful")
+                        self.logger.info(f"[{corr_id}] Voice state confirmed, connection successful")
                         # Create connection info from voice state
                         connection_info = {
                             "voice_client": None,  # We don't have the voice client object, but we're in voice
@@ -488,19 +488,19 @@ class VoiceManager(BaseManager):
                             await self.voice_repository.save_settings(
                                 guild_id, str(channel.id), True, self_mute, self_deaf
                             )
-                        self.success(f"[{corr_id}] Successfully joined voice channel: {channel.name}")
+                        self.logger.success(f"[{corr_id}] Successfully joined voice channel: {channel.name}")
                         return connection_info
                 raise error
 
             # For discord.py, wait for voice state to propagate
-            self.info(f"[{corr_id}] Waiting for voice state to propagate...")
+            self.logger.info(f"[{corr_id}] Waiting for voice state to propagate...")
             await asyncio.sleep(2)  # Give Discord time to propagate
 
             # Validate connection via guild voice state (primary source of truth)
             is_valid = await self.validate_connection(guild_id, str(channel.id))
 
             if not is_valid:
-                self.warning(f"[{corr_id}] Connection did not become ready in time")
+                self.logger.warning(f"[{corr_id}] Connection did not become ready in time")
                 if voice_client:
                     await voice_client.disconnect()
                 self.cleanup_guild_state(guild_id)
@@ -528,17 +528,17 @@ class VoiceManager(BaseManager):
                     guild_id, str(channel.id), True, self_mute, self_deaf
                 )
 
-            self.success(f"[{corr_id}] Successfully joined voice channel: {channel.name}")
+            self.logger.success(f"[{corr_id}] Successfully joined voice channel: {channel.name}")
 
             # Start heartbeat (only if we have voice client object)
             if voice_client:
                 self.start_heartbeat(guild_id, voice_client)
             else:
-                self.warning(f"[{corr_id}] No voice client object, skipping heartbeat")
+                self.logger.warning(f"[{corr_id}] No voice client object, skipping heartbeat")
 
             return connection_info
         except Exception as error:
-            self.error(f"[{corr_id}] Failed to join voice channel: {error}")
+            self.logger.error(f"[{corr_id}] Failed to join voice channel: {error}")
             self.set_connection_state(guild_id, ConnectionState.IDLE)
             return None
 
@@ -570,7 +570,7 @@ class VoiceManager(BaseManager):
             attempts = self.reconnect_attempts.get(guild_id, 0)
 
             if attempts >= self.max_reconnect_attempts:
-                self.error(f"[{corr_id}] Max reconnect attempts reached for {channel.name}")
+                self.logger.error(f"[{corr_id}] Max reconnect attempts reached for {channel.name}")
                 self.cleanup_guild_state(guild_id)
                 return
 
@@ -579,7 +579,7 @@ class VoiceManager(BaseManager):
 
             # Calculate delay with exponential backoff and jitter
             delay = self.calculate_reconnect_delay(attempts)
-            self.info(f"[{corr_id}] Reconnect attempt {attempts + 1}/{self.max_reconnect_attempts} in {int(delay / 1000)}s...")
+            self.logger.info(f"[{corr_id}] Reconnect attempt {attempts + 1}/{self.max_reconnect_attempts} in {int(delay / 1000)}s...")
 
             async def reconnect_handler() -> None:
                 await self.handle_reconnect(guild_id, channel, self_mute, self_deaf)
@@ -590,7 +590,7 @@ class VoiceManager(BaseManager):
                 delay
             )
         except Exception as error:
-            self.error(f"Error scheduling reconnect: {error}")
+            self.logger.error(f"Error scheduling reconnect: {error}")
 
     async def handle_reconnect(
         self,
@@ -604,21 +604,21 @@ class VoiceManager(BaseManager):
 
         # Don't reconnect if shutting down
         if self.is_shutting_down:
-            self.info(f"[{corr_id}] Not reconnecting - shutdown in progress")
+            self.logger.info(f"[{corr_id}] Not reconnecting - shutdown in progress")
             return
 
         # Check if we should still be connected
         saved_connection = self.connections.get(guild_id)
         if saved_connection and saved_connection["channel_id"] == str(channel.id):
-            self.debug(f"[{corr_id}] Already connected to target channel, skipping reconnect")
+            self.logger.debug(f"[{corr_id}] Already connected to target channel, skipping reconnect")
             return
 
         try:
             # Refresh channel from cache
             fresh_channel = self.client.get_channel(channel.id)
             if not fresh_channel or not isinstance(fresh_channel, discord.VoiceChannel):
-                self.warning(f"[{corr_id}] Channel {channel.id} no longer exists or is not a voice channel")
-                self.info(f"[{corr_id}] Stopping reconnect - voice channel was deleted")
+                self.logger.warning(f"[{corr_id}] Channel {channel.id} no longer exists or is not a voice channel")
+                self.logger.info(f"[{corr_id}] Stopping reconnect - voice channel was deleted")
 
                 # Cleanup and remove from DB since channel is gone
                 await self.disconnect(guild_id, True)
@@ -626,19 +626,19 @@ class VoiceManager(BaseManager):
 
             result = await self.join_channel(fresh_channel, self_mute, self_deaf, False)
             if result:
-                self.success(f"[{corr_id}] Successfully reconnected to {fresh_channel.name}")
+                self.logger.success(f"[{corr_id}] Successfully reconnected to {fresh_channel.name}")
                 self.record_circuit_success(guild_id)
             else:
                 raise Exception("join_channel returned None")
         except Exception as error:
-            self.error(f"[{corr_id}] Reconnect failed: {error}")
+            self.logger.error(f"[{corr_id}] Reconnect failed: {error}")
             self.record_circuit_failure(guild_id)
 
             attempts = self.reconnect_attempts.get(guild_id, 0)
             if attempts < self.max_reconnect_attempts:
                 self.schedule_reconnect(guild_id, channel, self_mute, self_deaf)
             else:
-                self.error(f"[{corr_id}] Max reconnect attempts exhausted")
+                self.logger.error(f"[{corr_id}] Max reconnect attempts exhausted")
                 self.cleanup_guild_state(guild_id)
 
     def cleanup_guild_state(self, guild_id: str) -> None:
@@ -688,14 +688,14 @@ class VoiceManager(BaseManager):
             if remove_from_db and self.voice_repository:
                 await self.voice_repository.delete_by_guild_id(guild_id)
 
-            self.success(f"[{corr_id}] Disconnected from voice channel: {connection_info['channel_name']}")
+            self.logger.success(f"[{corr_id}] Disconnected from voice channel: {connection_info['channel_name']}")
 
             # Cleanup state
             self.cleanup_guild_state(guild_id)
 
             return True
         except Exception as error:
-            self.error(f"[{corr_id}] Failed to disconnect: {error}")
+            self.logger.error(f"[{corr_id}] Failed to disconnect: {error}")
             self.cleanup_guild_state(guild_id)
             return False
 
@@ -778,14 +778,14 @@ class VoiceManager(BaseManager):
         Args:
             disconnect: Whether to disconnect from voice channels
         """
-        self.info("Cleaning up voice connections...")
+        self.logger.info("Cleaning up voice connections...")
         self.is_shutting_down = True
 
         if disconnect:
             # Disconnect all connections
             for guild_id, connection_info in list(self.connections.items()):
                 corr_id = self.get_correlation_id(guild_id)
-                self.info(f"[{corr_id}] Disconnecting from {connection_info['channel_name']}")
+                self.logger.info(f"[{corr_id}] Disconnecting from {connection_info['channel_name']}")
 
                 # Stop heartbeat
                 self.stop_heartbeat(guild_id)
@@ -799,13 +799,13 @@ class VoiceManager(BaseManager):
                     if voice_client:
                         asyncio.create_task(voice_client.disconnect())
                 except Exception as error:
-                    self.debug(f"[{corr_id}] Error during disconnect: {error}")
+                    self.logger.debug(f"[{corr_id}] Error during disconnect: {error}")
         else:
             # Just stop all heartbeats without disconnecting
             for guild_id in list(self.connections.keys()):
                 self.stop_heartbeat(guild_id)
                 self.clear_managed_timer(f"reconnect_{guild_id}")
-            self.info("Voice state preserved for Heroku dyno cycling")
+            self.logger.info("Voice state preserved for Heroku dyno cycling")
 
         # Clear all state
         self.connections.clear()
@@ -816,7 +816,7 @@ class VoiceManager(BaseManager):
         self.correlation_ids.clear()
         self.circuit_breakers.clear()
 
-        self.info("Voice connections cleanup complete")
+        self.logger.info("Voice connections cleanup complete")
 
         # Call parent cleanup
         super().cleanup()

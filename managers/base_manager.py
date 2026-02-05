@@ -6,16 +6,16 @@ Abstract base class for all managers to ensure consistent patterns
 import asyncio
 from typing import Any, Callable, Dict, Optional, TypeVar
 
-from self_dc_python.utils.logger import LoggerMixin
+from utils.logger import get_logger
 
 T = TypeVar('T')
 
 
-class BaseManager(LoggerMixin):
+class BaseManager:
     """Base class for all managers with timer management and cleanup."""
 
     def __init__(self, client: Any, name: str):
-        super().__init__(name)
+        self.logger = get_logger(name)
         self.client = client
         self.enabled = False
         self.channel: Optional[Any] = None
@@ -25,7 +25,7 @@ class BaseManager(LoggerMixin):
     def set_enabled(self, enabled: bool) -> None:
         """Enable/disable the manager."""
         self.enabled = enabled
-        self.info(f"{self.__class__.__name__} {'Enabled' if enabled else 'Disabled'}")
+        self.logger.info(f"{self.__class__.__name__} {'Enabled' if enabled else 'Disabled'}")
 
     def is_enabled(self) -> bool:
         """Check if manager is enabled."""
@@ -79,7 +79,7 @@ class BaseManager(LoggerMixin):
             try:
                 await asyncio.sleep(timeout_ms / 1000)
                 if message_id in self.pending_messages:
-                    self.debug(f"Pending message {message_id} timed out")
+                    self.logger.debug(f"Pending message {message_id} timed out")
                     cleanup()
             except asyncio.CancelledError:
                 pass
@@ -127,7 +127,7 @@ class BaseManager(LoggerMixin):
                     if asyncio.iscoroutine(result):
                         await result
                 except Exception as e:
-                    self.error(f"Timer {name} error: {e}")
+                    self.logger.error(f"Timer {name} error: {e}")
             except asyncio.CancelledError:
                 pass
 
@@ -146,12 +146,12 @@ class BaseManager(LoggerMixin):
         for name, task in list(self.timers.items()):
             if not task.done():
                 task.cancel()
-            self.debug(f"Cleared timer: {name}")
+            self.logger.debug(f"Cleared timer: {name}")
         self.timers.clear()
 
     def cleanup(self) -> None:
         """Clean up all resources."""
-        self.info("Cleaning up...")
+        self.logger.info("Cleaning up...")
 
         # Clear all pending messages
         for message_id, entry in list(self.pending_messages.items()):
