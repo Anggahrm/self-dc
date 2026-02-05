@@ -122,16 +122,17 @@ process.on('SIGINT', async () => {
   logger.info('Received SIGINT, cleaning up...');
   farmManager.cleanup();
   autoEnchantManager.cleanup();
-  await voiceManager.cleanup();
+  await voiceManager.cleanup({ disconnect: true });
   await database.closeDatabase();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  logger.info('Received SIGTERM, cleaning up...');
+  logger.info('Received SIGTERM (Heroku dyno cycling), preserving voice state...');
   farmManager.cleanup();
   autoEnchantManager.cleanup();
-  await voiceManager.cleanup();
+  // Don't disconnect voice for Heroku cycling - just cleanup timers
+  await voiceManager.cleanup({ disconnect: false });
   await database.closeDatabase();
   process.exit(0);
 });

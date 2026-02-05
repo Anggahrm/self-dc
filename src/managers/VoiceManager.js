@@ -867,29 +867,39 @@ class VoiceManager extends BaseManager {
   /**
    * Cleanup all voice connections (graceful shutdown)
    */
-  async cleanup() {
+  async cleanup(options = {}) {
+    const { disconnect = true } = options;
     this.logger.info('Cleaning up voice connections...');
     this.isShuttingDown = true;
 
-    // Disconnect all connections
-    for (const [guildId, connectionInfo] of this.connections) {
-      const corrId = this.getCorrelationId(guildId);
-      this.logger.info(`[${corrId}] Disconnecting from ${connectionInfo.channelName}`);
+    if (disconnect) {
+      // Disconnect all connections
+      for (const [guildId, connectionInfo] of this.connections) {
+        const corrId = this.getCorrelationId(guildId);
+        this.logger.info(`[${corrId}] Disconnecting from ${connectionInfo.channelName}`);
 
-      // Stop heartbeat
-      this.stopHeartbeat(guildId);
+        // Stop heartbeat
+        this.stopHeartbeat(guildId);
 
-      // Clear reconnect timer
-      this.clearManagedTimer(`reconnect_${guildId}`);
+        // Clear reconnect timer
+        this.clearManagedTimer(`reconnect_${guildId}`);
 
-      // Disconnect
-      try {
-        if (connectionInfo.connection) {
-          connectionInfo.connection.disconnect();
+        // Disconnect
+        try {
+          if (connectionInfo.connection) {
+            connectionInfo.connection.disconnect();
+          }
+        } catch (error) {
+          this.logger.debug(`[${corrId}] Error during disconnect: ${error.message}`);
         }
-      } catch (error) {
-        this.logger.debug(`[${corrId}] Error during disconnect: ${error.message}`);
       }
+    } else {
+      // Just stop all heartbeats without disconnecting
+      for (const guildId of this.connections.keys()) {
+        this.stopHeartbeat(guildId);
+        this.clearManagedTimer(`reconnect_${guildId}`);
+      }
+      this.logger.info('Voice state preserved for Heroku dyno cycling');
     }
 
     // Clear all state
